@@ -168,13 +168,18 @@ return {
         Packet.Boolean8
     ),
 
-    HitCandidates = Packet(
-        "HitCandidates",
-        Packet.String,
-        Packet.String,
-        Packet.NumberF32,
-        Packet.NumberF64
-    ),
+	HitCandidates = Packet(
+		"HitCandidates",
+		Packet.String,      -- SkillId
+		Packet.String,      -- TargetName
+		Packet.NumberF32,   -- Damage
+		Packet.NumberF32,   -- Stun
+		Packet.String,      -- AttackType
+		Packet.Boolean8,    -- Blockable
+		Packet.Boolean8,    -- Block360
+		Packet.Boolean8,    -- CancelEnemy
+		Packet.NumberF64    -- Timestamp
+	),
 
     HitConfirmed = Packet(
         "HitConfirmed",

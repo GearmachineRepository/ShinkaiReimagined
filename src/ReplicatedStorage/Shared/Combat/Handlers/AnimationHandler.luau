@@ -12,7 +12,27 @@ type HandlerResult = CombatTypes.HandlerResult
 
 local IsServer = RunService:IsServer()
 
+local ANIMATION_MAX_DURATION = 5
+local MIN_VALID_ASSET_ID = 1000000
+
 local AnimationHandler = {}
+
+local function IsValidAnimationId(AnimationId: string): boolean
+	if not AnimationId or AnimationId == "" then
+		return false
+	end
+
+	local AssetId = tonumber(string.match(AnimationId, "%d+"))
+	if not AssetId then
+		return false
+	end
+
+	if AssetId < MIN_VALID_ASSET_ID then
+		return false
+	end
+
+	return true
+end
 
 function AnimationHandler.Execute(Block: Block, Context: ExecutionContext): HandlerResult?
 	if IsServer then
@@ -20,7 +40,7 @@ function AnimationHandler.Execute(Block: Block, Context: ExecutionContext): Hand
 	end
 
 	local AnimationId = Block.AnimationId
-	if not AnimationId then
+	if not IsValidAnimationId(AnimationId) then
 		return nil
 	end
 
@@ -58,7 +78,36 @@ function AnimationHandler.Execute(Block: Block, Context: ExecutionContext): Hand
 	Track:AdjustSpeed(Speed)
 
 	if not Loop then
-		Track.Stopped:Wait()
+		if Track.Length == 0 then
+			task.wait()
+		end
+
+		local Duration = math.min(Track.Length / Speed, ANIMATION_MAX_DURATION)
+
+		if Duration > 0 then
+			local Completed = false
+
+			local Connection = Track.Stopped:Once(function()
+				Completed = true
+			end)
+
+			local StartTime = tick()
+			while not Completed and (tick() - StartTime) < Duration do
+				if Context.Canceled then
+					Track:Stop()
+					break
+				end
+				task.wait()
+			end
+
+			if Connection.Connected then
+				Connection:Disconnect()
+			end
+
+			if not Completed then
+				Track:Stop()
+			end
+		end
 	end
 
 	Animation:Destroy()

@@ -68,8 +68,19 @@ function SkillService.Start()
 		SkillService.OnSkillCanceled(Player, SkillId)
 	end)
 
-	ServiceTrove:Connect(Packets.HitCandidates.OnServerEvent :: any, function(Player: Player, SkillId: string, TargetName: string, Damage: number, Timestamp: number)
-		SkillService.OnHitCandidate(Player, SkillId, TargetName, Damage, Timestamp)
+	ServiceTrove:Connect(Packets.HitCandidates.OnServerEvent :: any, function(
+		Player: Player,
+		SkillId: string,
+		TargetName: string,
+		Damage: number,
+		Stun: number,
+		AttackType: string,
+		Blockable: boolean,
+		Block360: boolean,
+		CancelEnemy: boolean,
+		Timestamp: number
+	)
+		SkillService.OnHitCandidate(Player, SkillId, TargetName, Damage, Stun, AttackType, Blockable, Block360, CancelEnemy, Timestamp)
 	end)
 
 	ServiceTrove:Connect(Players.PlayerRemoving, function(Player: Player)
@@ -211,26 +222,21 @@ function SkillService.OnSkillRequested(Player: Player, SkillId: string, _Timesta
 	}
 
 	task.spawn(function()
-		local Context = SkillExecutor.Execute(ExecutionEntity, SkillDef, Ensemble.Events)
+		local Context = SkillExecutor.CreateContext(ExecutionEntity, SkillDef, Ensemble.Events)
 		ActiveContexts[Character] = Context
 
 		SkillService.SkillActivated:Fire(Entity, SkillId)
 
-		while not Context.Canceled do
-			if Context.GetElapsedTime() > 30 then
-				Context.Cancel()
-				break
-			end
-			task.wait()
-		end
+		SkillExecutor.Run(Context)
 
+		local WasCanceled = Context.Canceled
 		ActiveContexts[Character] = nil
 
 		if CombatComp then
 			CombatComp.SetActiveSkill(nil)
 		end
 
-		if Context.Canceled then
+		if WasCanceled then
 			SkillService.SkillCanceled:Fire(Entity, SkillId)
 		else
 			SkillService.SkillCompleted:Fire(Entity, SkillId)
@@ -250,7 +256,18 @@ function SkillService.OnSkillCanceled(Player: Player, _SkillId: string)
 	end
 end
 
-function SkillService.OnHitCandidate(Player: Player, SkillId: string, TargetName: string, Damage: number, Timestamp: number)
+function SkillService.OnHitCandidate(
+    Player: Player,
+    SkillId: string,
+    TargetName: string,
+    Damage: number,
+    Stun: number,
+    AttackType: string,
+    Blockable: boolean,
+    Block360: boolean,
+    CancelEnemy: boolean,
+    Timestamp: number
+)
 	local Character = Player.Character
 	if not Character then
 		return
@@ -302,19 +319,19 @@ function SkillService.OnHitCandidate(Player: Player, SkillId: string, TargetName
 		return
 	end
 
-	local AdjustedDamage = Damage * (Context.Properties.DamageMultiplier or 1)
+    local AdjustedDamage = Damage * (Context.Properties.DamageMultiplier or 1)
 
-	Ensemble.Events:Publish(Enums.Combat.Hitbox.Hit, {
-		Attacker = Context.Entity,
-		Target = TargetCharacter,
-		Damage = AdjustedDamage,
-		Stun = 0,
-		Position = TargetRoot.Position,
-		AttackType = "Melee",
-		Blockable = true,
-		Block360 = false,
-		CancelEnemy = true,
-	})
+    Ensemble.Events:Publish(Enums.Combat.Hitbox.Hit, {
+        Attacker = Context.Entity,
+        Target = TargetCharacter,
+        Damage = AdjustedDamage,
+        Stun = Stun,
+        Position = TargetRoot.Position,
+        AttackType = AttackType,
+        Blockable = Blockable,
+        Block360 = Block360,
+        CancelEnemy = CancelEnemy,
+    })
 end
 
 function SkillService.ProcessHit(Data: any)

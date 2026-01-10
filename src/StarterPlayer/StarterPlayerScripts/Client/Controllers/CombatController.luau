@@ -27,7 +27,7 @@ local LocalPlayer = Players.LocalPlayer :: Player
 
 local CombatController = {}
 
-CombatController.Dependencies = { "ToolbarController" }
+CombatController.Dependencies = {}
 
 CombatController.SkillActivated = Signal.new()
 CombatController.SkillCompleted = Signal.new()
@@ -39,8 +39,6 @@ local ControllerTrove: typeof(Trove.new()) = nil :: any
 local LocalEventBus: typeof(EventBus.new()) = nil :: any
 local Cooldowns: { [string]: number } = {}
 local ActiveContext: ExecutionContext? = nil
-
-local SKILL_TIMEOUT = 30
 
 function CombatController.Init()
 	ControllerTrove = Trove.new()
@@ -130,44 +128,43 @@ function CombatController.CanActivate(SkillId: string): (boolean, string?)
 end
 
 function CombatController.ActivateSkill(SkillId: string): boolean
-	local CanUse, _Reason = CombatController.CanActivate(SkillId)
-	if not CanUse then
-		return false
-	end
+    local CanUse, _Reason = CombatController.CanActivate(SkillId)
+    if not CanUse then
+        return false
+    end
 
-	local SkillDef = SkillRegistry.Get(SkillId)
-	if not SkillDef then
-		return false
-	end
+    local SkillDef = SkillRegistry.Get(SkillId)
+    if not SkillDef then
+        return false
+    end
 
-	local Character = LocalPlayer.Character :: Model
-	local Humanoid = Character:FindFirstChildOfClass("Humanoid")
-	if not Humanoid then
-		return false
-	end
+    local Character = LocalPlayer.Character :: Model
+    local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+    if not Humanoid then
+        return false
+    end
 
-	local Entity: ExecutionEntity = {
-		Character = Character,
-		Humanoid = Humanoid,
-		IsPlayer = true,
-		Player = LocalPlayer,
-	}
+    local Tool = ToolRegistry.GetBySkillId(SkillId)
+    if Tool and Tool.Cooldown then
+        Cooldowns[SkillId] = tick() + Tool.Cooldown
+    end
 
-	Packets.SkillActivate:Fire(SkillId, tick())
+    local Entity: ExecutionEntity = {
+        Character = Character,
+        Humanoid = Humanoid,
+        IsPlayer = true,
+        Player = LocalPlayer,
+    }
+
+    Packets.SkillActivate:Fire(SkillId, tick())
 
 	task.spawn(function()
-		local Context = SkillExecutor.Execute(Entity, SkillDef, LocalEventBus)
+		local Context = SkillExecutor.CreateContext(Entity, SkillDef, LocalEventBus)
 		ActiveContext = Context
 
 		CombatController.SkillActivated:Fire(SkillId)
 
-		while ActiveContext and not Context.Canceled do
-			if Context.GetElapsedTime() > SKILL_TIMEOUT then
-				Context.Cancel()
-				break
-			end
-			task.wait()
-		end
+		SkillExecutor.Run(Context)
 
 		local WasCanceled = Context.Canceled
 		ActiveContext = nil
