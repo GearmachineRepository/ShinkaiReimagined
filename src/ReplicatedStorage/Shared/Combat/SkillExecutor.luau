@@ -82,6 +82,41 @@ function SkillExecutor.GetEntryBranch(SkillDefinition: SkillDefinition): Branch
 	return { Timeline = {} }
 end
 
+function SkillExecutor.CheckSignalRequirement(Block: Block, Context: ExecutionContext): boolean
+	local RequireSignal = Block.RequireSignal
+	if not RequireSignal then
+		return true
+	end
+
+	local RequireAll = Block.RequireAll ~= false
+
+	if type(RequireSignal) == "string" then
+		return Context.IsSignalActive(RequireSignal)
+	end
+
+	if type(RequireSignal) == "table" then
+		local SignalList = RequireSignal :: { string }
+
+		if RequireAll then
+			for _, SignalId in SignalList do
+				if not Context.IsSignalActive(SignalId) then
+					return false
+				end
+			end
+			return true
+		else
+			for _, SignalId in SignalList do
+				if Context.IsSignalActive(SignalId) then
+					return true
+				end
+			end
+			return false
+		end
+	end
+
+	return true
+end
+
 function SkillExecutor.RunBranch(BranchData: Branch, ExecutionContext: ExecutionContext)
 	local Timeline = BranchData.Timeline
 	if not Timeline then
@@ -91,6 +126,10 @@ function SkillExecutor.RunBranch(BranchData: Branch, ExecutionContext: Execution
 	for _Index, Block in Timeline do
 		if ExecutionContext.Canceled then
 			break
+		end
+
+		if not SkillExecutor.CheckSignalRequirement(Block, ExecutionContext) then
+			continue
 		end
 
 		local Handler = Handlers.Get(Block.BlockType)

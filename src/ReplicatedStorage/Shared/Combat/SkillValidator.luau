@@ -1,0 +1,317 @@
+--!strict
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Enums = require(Shared.Enums)
+local PortSchemas = require(script.Parent.PortSchemas)
+
+local SkillValidator = {}
+
+local MAX_BLOCKS = 50
+local MAX_BRANCHES = 10
+local MAX_SIGNAL_LENGTH = 32
+local MAX_DAMAGE = 100
+local MAX_STUN = 5
+local MAX_WAIT = 10
+
+local ALLOWED_BLOCK_TYPES: { [string]: boolean } = {}
+for BlockType in pairs(Enums.Combat.BlockType) do
+    ALLOWED_BLOCK_TYPES[BlockType] = true
+end
+
+local function ValidateString(Value: any, MaxLength: number): string?
+    if type(Value) ~= "string" then
+        return nil
+    end
+    if #Value > MaxLength then
+        return string.sub(Value, 1, MaxLength)
+    end
+    return Value
+end
+
+local function ValidateNumber(Value: any, Min: number, Max: number, Default: number?): number?
+    if type(Value) ~= "number" then
+        return Default
+    end
+    return math.clamp(Value, Min, Max)
+end
+
+local function ValidateBoolean(Value: any, Default: boolean): boolean
+    if type(Value) == "boolean" then
+        return Value
+    end
+    return Default
+end
+
+local function ValidateBlock(Block: any): any?
+    if type(Block) ~= "table" then
+        return nil
+    end
+
+    local BlockType = Block.BlockType
+    if not ALLOWED_BLOCK_TYPES[BlockType] then
+        return nil
+    end
+
+    local Clean: { [string]: any } = {
+        BlockType = BlockType,
+    }
+
+    Clean.BlockId = ValidateString(Block.BlockId, MAX_SIGNAL_LENGTH)
+
+    if Block.RequireSignal then
+        if type(Block.RequireSignal) == "string" then
+            Clean.RequireSignal = ValidateString(Block.RequireSignal, MAX_SIGNAL_LENGTH)
+        elseif type(Block.RequireSignal) == "table" then
+            local Signals = {}
+            for _, Signal in Block.RequireSignal do
+                if #Signals >= 8 then
+                    break
+                end
+                local ValidSignal = ValidateString(Signal, MAX_SIGNAL_LENGTH)
+                if ValidSignal then
+                    table.insert(Signals, ValidSignal)
+                end
+            end
+            if #Signals > 0 then
+                Clean.RequireSignal = Signals
+            end
+        end
+    end
+
+    Clean.RequireAll = ValidateBoolean(Block.RequireAll, true)
+
+    if BlockType == "Wait" then
+        Clean.Time = ValidateNumber(Block.Time, 0, MAX_WAIT, 0.1)
+
+    elseif BlockType == "Hitbox" then
+        Clean.X = ValidateNumber(Block.X, -20, 20, 0)
+        Clean.Y = ValidateNumber(Block.Y, -20, 20, 0)
+        Clean.Z = ValidateNumber(Block.Z, -20, 20, 4)
+        Clean.SizeX = ValidateNumber(Block.SizeX, 1, 20, 6)
+        Clean.SizeY = ValidateNumber(Block.SizeY, 1, 20, 6)
+        Clean.SizeZ = ValidateNumber(Block.SizeZ, 1, 20, 6)
+        Clean.Damage = ValidateNumber(Block.Damage, 0, MAX_DAMAGE, 5)
+        Clean.Stun = ValidateNumber(Block.Stun, 0, MAX_STUN, 0.2)
+        Clean.AttackType = ValidateString(Block.AttackType, 16) or "Melee"
+        Clean.Blockable = ValidateBoolean(Block.Blockable, true)
+        Clean.Block360 = ValidateBoolean(Block.Block360, false)
+        Clean.CancelEnemy = ValidateBoolean(Block.CancelEnemy, true)
+
+        if type(Block.Outputs) == "table" then
+            Clean.Outputs = {
+                OnHit = ValidateString(Block.Outputs.OnHit, MAX_SIGNAL_LENGTH),
+                OnMiss = ValidateString(Block.Outputs.OnMiss, MAX_SIGNAL_LENGTH),
+                Duration = ValidateNumber(Block.Outputs.Duration, 0, 10, nil),
+            }
+        end
+
+    elseif BlockType == "Animation" then
+        Clean.AnimationId = ValidateString(Block.AnimationId, 64)
+        Clean.Speed = ValidateNumber(Block.Speed, 0.1, 3, 1)
+        Clean.Loop = ValidateBoolean(Block.Loop, false)
+
+    elseif BlockType == "Sound" then
+        Clean.SoundId = ValidateString(Block.SoundId, 64)
+        Clean.Volume = ValidateNumber(Block.Volume, 0, 2, 1)
+        Clean.Speed = ValidateNumber(Block.Speed, 0.1, 3, 1)
+
+    elseif BlockType == "Velocity" then
+        Clean.X = ValidateNumber(Block.X, -100, 100, 0)
+        Clean.Y = ValidateNumber(Block.Y, -100, 100, 0)
+        Clean.Z = ValidateNumber(Block.Z, -100, 100, 0)
+        Clean.Time = ValidateNumber(Block.Time, 0, 2, 0.2)
+        Clean.Fade = ValidateBoolean(Block.Fade, false)
+        Clean.Track = ValidateBoolean(Block.Track, false)
+
+    elseif BlockType == "Signal" then
+        Clean.SignalId = ValidateString(Block.SignalId, MAX_SIGNAL_LENGTH)
+        Clean.Duration = ValidateNumber(Block.Duration, 0, 10, nil)
+        Clean.Clear = ValidateBoolean(Block.Clear, false)
+
+    elseif BlockType == "AndGate" or BlockType == "OrGate" then
+        if type(Block.Inputs) == "table" then
+            Clean.Inputs = {}
+            for _, Input in Block.Inputs do
+                if #Clean.Inputs >= 8 then
+                    break
+                end
+                local ValidInput = ValidateString(Input, MAX_SIGNAL_LENGTH)
+                if ValidInput then
+                    table.insert(Clean.Inputs, ValidInput)
+                end
+            end
+        end
+        Clean.Threshold = ValidateNumber(Block.Threshold, 1, 8, nil)
+        Clean.Output = ValidateString(Block.Output, MAX_SIGNAL_LENGTH)
+        Clean.Duration = ValidateNumber(Block.Duration, 0, 10, nil)
+
+    elseif BlockType == "NotGate" then
+        Clean.Input = ValidateString(Block.Input, MAX_SIGNAL_LENGTH)
+        Clean.Output = ValidateString(Block.Output, MAX_SIGNAL_LENGTH)
+        Clean.Duration = ValidateNumber(Block.Duration, 0, 10, nil)
+
+    elseif BlockType == "Timer" then
+        Clean.Input = ValidateString(Block.Input, MAX_SIGNAL_LENGTH)
+        Clean.Time = ValidateNumber(Block.Time, 0.1, MAX_WAIT, 1)
+        Clean.Output = ValidateString(Block.Output, MAX_SIGNAL_LENGTH)
+        Clean.OutputDuration = ValidateNumber(Block.OutputDuration, 0, 10, nil)
+
+    elseif BlockType == "Counter" then
+        Clean.Input = ValidateString(Block.Input, MAX_SIGNAL_LENGTH)
+        Clean.Threshold = ValidateNumber(Block.Threshold, 1, 100, 3)
+        Clean.Output = ValidateString(Block.Output, MAX_SIGNAL_LENGTH)
+        Clean.Duration = ValidateNumber(Block.Duration, 0, 10, nil)
+        Clean.ResetOnThreshold = ValidateBoolean(Block.ResetOnThreshold, true)
+
+    elseif BlockType == "HitCancel" then
+        Clean.Time = ValidateNumber(Block.Time, 0, 5, 0.5)
+        Clean.Flip = ValidateBoolean(Block.Flip, false)
+        Clean.Endlag = ValidateNumber(Block.Endlag, 0, 2, 0)
+        Clean.Branch = ValidateString(Block.Branch, 32)
+
+    elseif BlockType == "AddHealth" then
+        Clean.Amount = ValidateNumber(Block.Amount, -50, 50, 5)
+
+    elseif BlockType == "Branch" then
+        Clean.BranchName = ValidateString(Block.BranchName, 32)
+
+    elseif BlockType == "Skill" then
+        Clean.SkillId = ValidateString(Block.SkillId, 32)
+        Clean.Speed = ValidateNumber(Block.Speed, 0.1, 3, 1)
+        Clean.CancelLast = ValidateBoolean(Block.CancelLast, false)
+        Clean.HoldFor = ValidateNumber(Block.HoldFor, 0, 5, 0)
+    end
+
+    return Clean
+end
+
+local function ValidateTimeline(Timeline: any): { any }?
+    if type(Timeline) ~= "table" then
+        return nil
+    end
+
+    local Clean = {}
+    for _, Block in Timeline do
+        if #Clean >= MAX_BLOCKS then
+            break
+        end
+
+        local ValidBlock = ValidateBlock(Block)
+        if ValidBlock then
+            table.insert(Clean, ValidBlock)
+        end
+    end
+
+    return Clean
+end
+
+local function ValidateBranch(Branch: any): any?
+    if type(Branch) ~= "table" then
+        return nil
+    end
+
+    local Timeline = ValidateTimeline(Branch.Timeline)
+    if not Timeline then
+        return nil
+    end
+
+    return {
+        Entry = Branch.Entry == true,
+        Timeline = Timeline,
+    }
+end
+
+function SkillValidator.Validate(RawSkill: any): any?
+    if type(RawSkill) ~= "table" then
+        return nil
+    end
+
+    local SkillId = ValidateString(RawSkill.SkillId, 32)
+    if not SkillId then
+        return nil
+    end
+
+    local Clean: { [string]: any } = {
+        SkillId = SkillId,
+        DisplayName = ValidateString(RawSkill.DisplayName, 48) or SkillId,
+        IsPlayerMade = true,
+    }
+
+    if RawSkill.Timeline then
+        local Timeline = ValidateTimeline(RawSkill.Timeline)
+        if not Timeline or #Timeline == 0 then
+            return nil
+        end
+        Clean.Timeline = Timeline
+
+    elseif RawSkill.Branches then
+        if type(RawSkill.Branches) ~= "table" then
+            return nil
+        end
+
+        Clean.Branches = {}
+        local BranchCount = 0
+        local HasEntry = false
+
+        for BranchName, BranchData in RawSkill.Branches do
+            if BranchCount >= MAX_BRANCHES then
+                break
+            end
+
+            local ValidName = ValidateString(BranchName, 32)
+            if ValidName then
+                local ValidBranch = ValidateBranch(BranchData)
+                if ValidBranch then
+                    Clean.Branches[ValidName] = ValidBranch
+                    BranchCount = BranchCount + 1
+                    if ValidBranch.Entry then
+                        HasEntry = true
+                    end
+                end
+            end
+        end
+
+        if BranchCount == 0 then
+            return nil
+        end
+
+        if not HasEntry and Clean.Branches["Main"] then
+            Clean.Branches["Main"].Entry = true
+        end
+    end
+
+    if not Clean.Timeline and not Clean.Branches then
+        return nil
+    end
+
+    if RawSkill.Conditions and type(RawSkill.Conditions) == "table" then
+        Clean.Conditions = {
+            OnAir = if type(RawSkill.Conditions.OnAir) == "boolean"
+                then RawSkill.Conditions.OnAir
+                else nil,
+        }
+    end
+
+    Clean.Properties = {
+        DamageMultiplier = 1,
+        KnockbackMultiplier = 1,
+    }
+
+    return Clean
+end
+
+function SkillValidator.ValidateBlock(Block: any): any?
+    return ValidateBlock(Block)
+end
+
+function SkillValidator.GetPortSchema(BlockType: string): { Outputs: { string } }?
+    return PortSchemas[BlockType]
+end
+
+function SkillValidator.GetAllPortSchemas(): { [string]: { Outputs: { string } } }
+    return PortSchemas
+end
+
+return SkillValidator

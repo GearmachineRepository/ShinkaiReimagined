@@ -143,7 +143,7 @@ return {
 		Packet.Any
 	),
 
-
+	-- SKILL PACKETS
     SkillActivate = Packet(
         "SkillActivate",
         Packet.String,
@@ -202,5 +202,71 @@ return {
         Packet.Vector3F32,
         Packet.NumberF32,
         Packet.NumberF32
+    ),
+
+	--PLAYER SKILLS
+    PlayerSkillCreate = Packet(
+        "PlayerSkillCreate",
+        Packet.Any                  -- RawSkill table
+    ),
+
+    PlayerSkillCreateResult = Packet(
+        "PlayerSkillCreateResult",
+        Packet.Boolean8,            -- Success
+        Packet.String               -- SkillId or ErrorReason
+    ),
+
+    PlayerSkillUpdate = Packet(
+        "PlayerSkillUpdate",
+        Packet.Any                  -- RawSkill table
+    ),
+
+    PlayerSkillUpdateResult = Packet(
+        "PlayerSkillUpdateResult",
+        Packet.Boolean8,            -- Success
+        Packet.String               -- SkillId or ErrorReason
+    ),
+
+    PlayerSkillDelete = Packet(
+        "PlayerSkillDelete",
+        Packet.String               -- SkillId
+    ),
+
+    PlayerSkillDeleteResult = Packet(
+        "PlayerSkillDeleteResult",
+        Packet.Boolean8,            -- Success
+        Packet.String               -- SkillId or ErrorReason
+    ),
+
+    PlayerSkillEquip = Packet(
+        "PlayerSkillEquip",
+        Packet.String               -- SkillId
+    ),
+
+    PlayerSkillEquipResult = Packet(
+        "PlayerSkillEquipResult",
+        Packet.Boolean8,            -- Success
+        Packet.String               -- SkillId or ErrorReason
+    ),
+
+    PlayerSkillUnequip = Packet(
+        "PlayerSkillUnequip",
+        Packet.String               -- SkillId
+    ),
+
+    PlayerSkillSync = Packet(
+        "PlayerSkillSync",
+        Packet.Any                  -- { [SkillId]: SkillData }
+    ),
+
+    PlayerSkillAdded = Packet(
+        "PlayerSkillAdded",
+        Packet.String,              -- SkillId
+        Packet.Any                  -- SkillData
+    ),
+
+    PlayerSkillRemoved = Packet(
+        "PlayerSkillRemoved",
+        Packet.String               -- SkillId
     ),
 }

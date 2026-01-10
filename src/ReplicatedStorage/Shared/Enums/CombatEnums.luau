@@ -9,19 +9,22 @@ return table.freeze({
 		Hitbox = "Hitbox",
 		HitCancel = "HitCancel",
 		Skill = "Skill",
-		Connect = "Connect",
-		AddAwakening = "AddAwakening",
-		AddHealth = "AddHealth",
-		AddEvasive = "AddEvasive",
 		Branch = "Branch",
+		AddHealth = "AddHealth",
+
+		Signal = "Signal",
+		AndGate = "AndGate",
+		OrGate = "OrGate",
+		NotGate = "NotGate",
+		Timer = "Timer",
+		Counter = "Counter",
 	}),
 
 	AttackType = table.freeze({
 		Melee = "Melee",
-		Bullet = "Bullet",
+		Projectile = "Projectile",
 		Explosion = "Explosion",
-		Swarm = "Swarm",
-		Domain = "Domain",
+		Area = "Area",
 	}),
 
 	Skill = table.freeze({
@@ -40,8 +43,8 @@ return table.freeze({
 		Blocked = "Combat.Hitbox.Blocked",
 	}),
 
-	Connect = table.freeze({
-		SignalSent = "Combat.Connect.SignalSent",
-		SignalReceived = "Combat.Connect.SignalReceived",
+	Signal = table.freeze({
+		Emitted = "Combat.Signal.Emitted",
+		Cleared = "Combat.Signal.Cleared",
 	}),
 })

@@ -6,6 +6,11 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Enums = require(Shared.Enums)
 local Packets = require(Shared.Network.Packets)
+local CombatTypes = require(Shared.Types.CombatTypes)
+
+type Block = CombatTypes.Block
+type ExecutionContext = CombatTypes.ExecutionContext
+type HandlerResult = CombatTypes.HandlerResult
 
 local IsServer = RunService:IsServer()
 
@@ -50,7 +55,7 @@ local function DetectTargets(Origin: CFrame, Size: Vector3, Exclude: Model): { M
 	return Results
 end
 
-function HitboxHandler.Execute(Block: any, ExecutionContext: any): any?
+function HitboxHandler.Execute(Block: Block, Context: ExecutionContext): HandlerResult?
 	local OffsetX = Block.X or 0
 	local OffsetY = Block.Y or 0
 	local OffsetZ = Block.Z or 4
@@ -59,13 +64,16 @@ function HitboxHandler.Execute(Block: any, ExecutionContext: any): any?
 	local SizeZ = Block.SizeZ or 6
 
 	local Stun = Block.Stun or 0
-	local Damage = (Block.Damage or 0) * ExecutionContext.Properties.DamageMultiplier
+	local Damage = (Block.Damage or 0) * Context.Properties.DamageMultiplier
 	local AttackType = Block.AttackType or "Melee"
 	local Blockable = Block.Blockable ~= false
 	local Block360 = Block.Block360 or false
 	local CancelEnemy = Block.CancelEnemy ~= false
 
-	local Character = ExecutionContext.Entity.Character
+	local Outputs = Block.Outputs
+	local OutputDuration = Outputs and Outputs.Duration
+
+	local Character = Context.Entity.Character
 	local RootPart = Character:FindFirstChild("HumanoidRootPart") :: BasePart?
 
 	if not RootPart then
@@ -76,28 +84,15 @@ function HitboxHandler.Execute(Block: any, ExecutionContext: any): any?
 	local Size = Vector3.new(SizeX, SizeY, SizeZ)
 	local Origin = RootPart.CFrame * CFrame.new(Offset)
 
-	local DebugPart = Instance.new("Part")
-	DebugPart.Name = "HitboxDebug"
-	DebugPart.Size = Size
-	DebugPart.CFrame = Origin
-	DebugPart.Anchored = true
-	DebugPart.CanCollide = false
-	DebugPart.Transparency = 0.5
-	DebugPart.Color = Color3.fromRGB(255, 0, 0)
-	DebugPart.Parent = workspace
-	task.delay(0.5, function()
-		DebugPart:Destroy()
-	end)
-
 	local Targets = DetectTargets(Origin, Size, Character)
 
 	if #Targets > 0 then
 		for _, Target in Targets do
-			ExecutionContext.RecordHit(Target, Damage)
+			Context.RecordHit(Target, Damage)
 
 			if not IsServer then
 				Packets.HitCandidates:Fire(
-					ExecutionContext.SkillDefinition.SkillId,
+					Context.SkillDefinition.SkillId,
 					Target.Name,
 					Damage,
 					Stun,
@@ -109,11 +104,19 @@ function HitboxHandler.Execute(Block: any, ExecutionContext: any): any?
 				)
 			end
 		end
+
+		if Outputs and Outputs.OnHit then
+			Context.EmitSignal(Outputs.OnHit, OutputDuration)
+		end
 	else
-		ExecutionContext.EventBus:Publish(Enums.Combat.Hitbox.Missed, {
-			Entity = ExecutionContext.Entity,
-			SkillId = ExecutionContext.SkillDefinition.SkillId,
+		Context.EventBus:Publish(Enums.Combat.Hitbox.Missed, {
+			Entity = Context.Entity,
+			SkillId = Context.SkillDefinition.SkillId,
 		})
+
+		if Outputs and Outputs.OnMiss then
+			Context.EmitSignal(Outputs.OnMiss, OutputDuration)
+		end
 	end
 
 	return nil

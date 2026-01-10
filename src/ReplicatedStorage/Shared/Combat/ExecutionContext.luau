@@ -13,6 +13,7 @@ type SkillDefinition = CombatTypes.SkillDefinition
 type SkillProperties = CombatTypes.SkillProperties
 type HitRecord = CombatTypes.HitRecord
 type ExecutionContext = CombatTypes.ExecutionContext
+type SignalState = CombatTypes.SignalState
 type EventBus = CombatTypes.EventBus
 
 local ExecutionContextModule = {}
@@ -38,6 +39,12 @@ function ExecutionContextModule.Create(
 	local HitRecords: { HitRecord } = {}
 	local LastHitTarget: Model? = nil
 	local Canceled = false
+
+	local Signals: SignalState = {
+		Active = {},
+		Expiry = {},
+		Counters = {},
+	}
 
 	local function GetElapsedTime(): number
 		return tick() - StartTime
@@ -71,6 +78,67 @@ function ExecutionContextModule.Create(
 		return LastHitTarget
 	end
 
+	local function EmitSignal(SignalId: string, Duration: number?)
+		Signals.Active[SignalId] = true
+
+		if Duration and Duration > 0 then
+			local ExpiryTime = tick() + Duration
+			Signals.Expiry[SignalId] = ExpiryTime
+
+			task.delay(Duration, function()
+				if Signals.Expiry[SignalId] == ExpiryTime then
+					Signals.Active[SignalId] = nil
+					Signals.Expiry[SignalId] = nil
+				end
+			end)
+		end
+	end
+
+	local function ClearSignal(SignalId: string)
+		Signals.Active[SignalId] = nil
+		Signals.Expiry[SignalId] = nil
+	end
+
+	local function IsSignalActive(SignalId: string): boolean
+		if not Signals.Active[SignalId] then
+			return false
+		end
+
+		local ExpiryTime = Signals.Expiry[SignalId]
+		if ExpiryTime and tick() >= ExpiryTime then
+			Signals.Active[SignalId] = nil
+			Signals.Expiry[SignalId] = nil
+			return false
+		end
+
+		return true
+	end
+
+	local function GetActiveSignals(): { string }
+		local Result = {}
+		for SignalId in Signals.Active do
+			if IsSignalActive(SignalId) then
+				table.insert(Result, SignalId)
+			end
+		end
+		return Result
+	end
+
+	local function IncrementCounter(CounterId: string): number
+		local Current = Signals.Counters[CounterId] or 0
+		Current = Current + 1
+		Signals.Counters[CounterId] = Current
+		return Current
+	end
+
+	local function GetCounter(CounterId: string): number
+		return Signals.Counters[CounterId] or 0
+	end
+
+	local function ResetCounter(CounterId: string)
+		Signals.Counters[CounterId] = nil
+	end
+
 	local Context: ExecutionContext = {
 		Entity = Entity,
 		SkillDefinition = SkillDefinition,
@@ -80,12 +148,21 @@ function ExecutionContextModule.Create(
 		Properties = Properties,
 		HitRecords = HitRecords,
 		LastHitTarget = LastHitTarget,
+		Signals = Signals,
 
 		GetElapsedTime = GetElapsedTime,
 		Cancel = Cancel,
 		RecordHit = RecordHit,
 		HadHitInWindow = HadHitInWindow,
 		GetLastHitTarget = GetLastHitTarget,
+
+		EmitSignal = EmitSignal,
+		ClearSignal = ClearSignal,
+		IsSignalActive = IsSignalActive,
+		GetActiveSignals = GetActiveSignals,
+		IncrementCounter = IncrementCounter,
+		GetCounter = GetCounter,
+		ResetCounter = ResetCounter,
 	}
 
 	return setmetatable({}, {
@@ -93,9 +170,11 @@ function ExecutionContextModule.Create(
 			if Key == "Canceled" then
 				return Canceled
 			elseif Key == "HitRecords" then
-				return HitRecords
+				return HitRecords :: any
 			elseif Key == "LastHitTarget" then
-				return LastHitTarget
+				return LastHitTarget :: any
+			elseif Key == "Signals" then
+				return Signals :: any
 			else
 				return (Context :: any)[Key]
 			end

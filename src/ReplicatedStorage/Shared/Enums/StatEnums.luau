@@ -3,10 +3,8 @@
 return table.freeze({
 	Health = "Health",
 	MaxHealth = "MaxHealth",
-	Awakening = "Awakening",
-	MaxAwakening = "MaxAwakening",
-	Evasive = "Evasive",
-	MaxEvasive = "MaxEvasive",
+	Stamina = "Stamina",
+	MaxStamina = "MaxStamina",
 	Durability = "Durability",
 	MaxDurability = "MaxDurability",
 })

@@ -17,44 +17,39 @@ export type ExecutionEntity = {
 
 export type Block = {
 	BlockType: string,
+	BlockId: string?,
+	RequireSignal: (string | { string })?,
+	RequireAll: boolean?,
 	[string]: any,
 }
 
-export type WaitBlock = {
-	BlockType: string,
+export type WaitBlock = Block & {
 	Time: number?,
 }
 
-export type AnimationBlock = {
-	BlockType: string,
+export type AnimationBlock = Block & {
 	AnimationId: string,
 	Speed: number?,
 	Loop: boolean?,
-	LastHit: number?,
+	Priority: Enum.AnimationPriority?,
 }
 
-export type SoundBlock = {
-	BlockType: string,
+export type SoundBlock = Block & {
 	SoundId: string,
 	Volume: number?,
 	Speed: number?,
 }
 
-export type VelocityBlock = {
-	BlockType: string,
+export type VelocityBlock = Block & {
 	X: number?,
 	Y: number?,
 	Z: number?,
 	Time: number?,
 	Fade: boolean?,
 	Track: boolean?,
-	LastHit: number?,
-	Ragdoll: number?,
-	TrueRagdoll: boolean?,
 }
 
-export type HitboxBlock = {
-	BlockType: string,
+export type HitboxBlock = Block & {
 	X: number?,
 	Y: number?,
 	Z: number?,
@@ -67,41 +62,74 @@ export type HitboxBlock = {
 	Blockable: boolean?,
 	Block360: boolean?,
 	CancelEnemy: boolean?,
+	Outputs: {
+		OnHit: string?,
+		OnMiss: string?,
+		Duration: number?,
+	}?,
 }
 
-export type HitCancelBlock = {
-	BlockType: string,
+export type HitCancelBlock = Block & {
 	Time: number?,
 	Flip: boolean?,
 	Endlag: number?,
 	Branch: string?,
 }
 
-export type SkillBlock = {
-	BlockType: string,
+export type SkillBlock = Block & {
 	SkillId: string,
 	Speed: number?,
 	CancelLast: boolean?,
 	HoldFor: number?,
 }
 
-export type ConnectBlock = {
-	BlockType: string,
-	Signal: string?,
-	Time: number?,
-	Range: number?,
+export type SignalBlock = Block & {
+	SignalId: string,
+	Duration: number?,
+	Clear: boolean?,
 }
 
-export type AddResourceBlock = {
-	BlockType: string,
+export type AndGateBlock = Block & {
+	Inputs: { string },
+	Threshold: number?,
+	Output: string?,
+	Duration: number?,
+}
+
+export type OrGateBlock = Block & {
+	Inputs: { string },
+	Output: string?,
+	Duration: number?,
+}
+
+export type NotGateBlock = Block & {
+	Input: string,
+	Output: string?,
+	Duration: number?,
+}
+
+export type TimerBlock = Block & {
+	Input: string?,
+	Time: number,
+	Output: string?,
+	OutputDuration: number?,
+}
+
+export type CounterBlock = Block & {
+	Input: string?,
+	Threshold: number,
+	Output: string?,
+	Duration: number?,
+	ResetOnThreshold: boolean?,
+}
+
+export type AddHealthBlock = Block & {
 	Amount: number?,
 }
 
 export type SkillConditions = {
 	OnAir: boolean?,
 	HasTarget: boolean?,
-	IsAwakened: boolean?,
-	HasAwkBar: number?,
 	Durability: number?,
 }
 
@@ -134,13 +162,18 @@ export type ToolDefinition = {
 	SkillId: string,
 	GroundOnly: boolean?,
 	RequiresTarget: boolean?,
-	AwakeningOnly: boolean?,
 }
 
 export type HitRecord = {
 	Target: Model,
 	Timestamp: number,
 	Damage: number,
+}
+
+export type SignalState = {
+	Active: { [string]: boolean },
+	Expiry: { [string]: number },
+	Counters: { [string]: number },
 }
 
 export type ExecutionContext = {
@@ -152,12 +185,21 @@ export type ExecutionContext = {
 	Properties: SkillProperties,
 	HitRecords: { HitRecord },
 	LastHitTarget: Model?,
+	Signals: SignalState,
 
 	GetElapsedTime: () -> number,
 	Cancel: () -> (),
 	RecordHit: (Target: Model, Damage: number) -> (),
 	HadHitInWindow: (WindowSeconds: number) -> boolean,
 	GetLastHitTarget: () -> Model?,
+
+	EmitSignal: (SignalId: string, Duration: number?) -> (),
+	ClearSignal: (SignalId: string) -> (),
+	IsSignalActive: (SignalId: string) -> boolean,
+	GetActiveSignals: () -> { string },
+	IncrementCounter: (CounterId: string) -> number,
+	GetCounter: (CounterId: string) -> number,
+	ResetCounter: (CounterId: string) -> (),
 }
 
 export type HandlerResult = {
