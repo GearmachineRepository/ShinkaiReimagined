@@ -13,6 +13,7 @@ export type DropdownConfig = {
 	Position: UDim2?,
 	AnchorPoint: Vector2?,
 	LayoutOrder: number?,
+	ZIndex: number?,
 	Parent: GuiObject?,
 	OnSelected: ((Option: string) -> ())?,
 }
@@ -29,6 +30,7 @@ function Dropdown.Create(Config: DropdownConfig): DropdownInstance
 	local Options = Config.Options or {}
 	local SelectedOption = Config.Selected
 	local IsOpen = false
+	local BaseZIndex = Config.ZIndex or Theme.ZIndex.Panel
 
 	local Container = Instance.new("Frame")
 	Container.Name = Config.Name or "Dropdown"
@@ -39,6 +41,7 @@ function Dropdown.Create(Config: DropdownConfig): DropdownInstance
 	Container.BorderSizePixel = 0
 	Container.LayoutOrder = Config.LayoutOrder or 0
 	Container.ClipsDescendants = false
+	Container.ZIndex = BaseZIndex
 
 	local Button = Instance.new("TextButton")
 	Button.Name = "Button"
@@ -51,6 +54,7 @@ function Dropdown.Create(Config: DropdownConfig): DropdownInstance
 	Button.TextSize = Theme.TextSizes.Default
 	Button.TextXAlignment = Enum.TextXAlignment.Left
 	Button.AutoButtonColor = false
+	Button.ZIndex = BaseZIndex
 	Button.Parent = Container
 
 	Theme.ApplyCorner(Button, Theme.Sizes.BorderRadiusSmall)
@@ -67,6 +71,7 @@ function Dropdown.Create(Config: DropdownConfig): DropdownInstance
 	Arrow.TextColor3 = Theme.Colors.TextMuted
 	Arrow.FontFace = Theme.Fonts.Default
 	Arrow.TextSize = 10
+	Arrow.ZIndex = BaseZIndex + 1
 	Arrow.Parent = Button
 
 	local OptionsList = Instance.new("Frame")
@@ -129,9 +134,9 @@ function Dropdown.Create(Config: DropdownConfig): DropdownInstance
 		end
 		table.clear(OptionButtons)
 
-        local Iterator = 0 :: number
+		local Iterator = 0
 		for Index, Option in pairs(Options) do
-            Iterator +=1
+			Iterator += 1
 			local OptionButton = Instance.new("TextButton")
 			OptionButton.Name = "Option_" .. Index
 			OptionButton.Size = UDim2.new(1, 0, 0, Theme.Sizes.InputHeight)
@@ -144,7 +149,7 @@ function Dropdown.Create(Config: DropdownConfig): DropdownInstance
 			OptionButton.TextSize = Theme.TextSizes.Default
 			OptionButton.TextXAlignment = Enum.TextXAlignment.Left
 			OptionButton.AutoButtonColor = false
-			OptionButton.ZIndex = Theme.ZIndex.Dropdown
+			OptionButton.ZIndex = Theme.ZIndex.Dropdown + 1
 			OptionButton.LayoutOrder = Iterator
 			OptionButton.Parent = OptionsList
 

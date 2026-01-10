@@ -1,6 +1,7 @@
 --!strict
 
 local UserInputService = game:GetService("UserInputService")
+local GuiService = game:GetService("GuiService")
 
 local Theme = require(script.Parent.Parent.Theme)
 
@@ -11,6 +12,7 @@ export type CanvasConfig = {
 	Size: UDim2?,
 	Position: UDim2?,
 	AnchorPoint: Vector2?,
+	GridImage: string?,
 	Parent: GuiObject?,
 	OnOffsetChanged: ((Offset: Vector2) -> ())?,
 	OnZoomChanged: ((Zoom: number) -> ())?,
@@ -31,11 +33,12 @@ export type CanvasInstance = {
 local MIN_ZOOM = 0.25
 local MAX_ZOOM = 2
 local ZOOM_STEP = 0.1
-local GRID_SIZE = 20
+local GRID_SIZE = 100
 
 function Canvas.Create(Config: CanvasConfig): CanvasInstance
 	local Offset = Vector2.zero
 	local Zoom = 1
+	local IsMouseOver = false
 
 	local Container = Instance.new("Frame")
 	Container.Name = Config.Name or "Canvas"
@@ -46,13 +49,18 @@ function Canvas.Create(Config: CanvasConfig): CanvasInstance
 	Container.BorderSizePixel = 0
 	Container.ClipsDescendants = true
 
-	local GridPattern = Instance.new("Frame")
-	GridPattern.Name = "Grid"
-	GridPattern.Size = UDim2.fromScale(3, 3)
-	GridPattern.Position = UDim2.fromScale(-1, -1)
-	GridPattern.BackgroundColor3 = Theme.Colors.BackgroundDark
-	GridPattern.BorderSizePixel = 0
-	GridPattern.Parent = Container
+	local GridBackground: ImageLabel = Instance.new("ImageLabel")
+	GridBackground.Name = "Grid"
+	GridBackground.Size = UDim2.fromScale(2, 2)
+	GridBackground.Position = UDim2.fromScale(0, 0)
+	GridBackground.BackgroundTransparency = 1
+	GridBackground.Image = if Config.GridImage then Config.GridImage else ""
+	GridBackground.ImageColor3 = Color3.fromRGB(255, 255, 255)
+	GridBackground.ImageTransparency = 0.925
+	GridBackground.ScaleType = Enum.ScaleType.Tile
+	GridBackground.TileSize = UDim2.fromOffset(GRID_SIZE, GRID_SIZE)
+	GridBackground.ZIndex = 1
+	GridBackground.Parent = Container
 
 	local Content = Instance.new("Frame")
 	Content.Name = "Content"
@@ -61,6 +69,11 @@ function Canvas.Create(Config: CanvasConfig): CanvasInstance
 	Content.AnchorPoint = Vector2.new(0.5, 0.5)
 	Content.BackgroundTransparency = 1
 	Content.Parent = Container
+
+	local UIScaleObj = Instance.new("UIScale")
+	UIScaleObj.Name = "ZoomScale"
+	UIScaleObj.Scale = 1
+	UIScaleObj.Parent = Content
 
 	if Config.Parent then
 		Container.Parent = Config.Parent
@@ -73,14 +86,25 @@ function Canvas.Create(Config: CanvasConfig): CanvasInstance
 
 	local function UpdateContentTransform()
 		Content.Position = UDim2.new(0.5, Offset.X, 0.5, Offset.Y)
-		Content.Size = UDim2.fromScale(Zoom, Zoom)
+		UIScaleObj.Scale = Zoom
 
-		local GridOffset = Vector2.new(
-			(Offset.X % (GRID_SIZE * Zoom)) / (GRID_SIZE * Zoom),
-			(Offset.Y % (GRID_SIZE * Zoom)) / (GRID_SIZE * Zoom)
-		)
-		GridPattern.Position = UDim2.fromScale(-1 + GridOffset.X, -1 + GridOffset.Y)
+		if GridBackground then
+			local ScaledGridSize = GRID_SIZE * Zoom
+			GridBackground.TileSize = UDim2.fromOffset(ScaledGridSize, ScaledGridSize)
+
+			local GridOffsetX = Offset.X % ScaledGridSize
+			local GridOffsetY = Offset.Y % ScaledGridSize
+			GridBackground.Position = UDim2.new(-0.5, GridOffsetX, -0.5, GridOffsetY)
+		end
 	end
+
+	table.insert(Connections, Container.MouseEnter:Connect(function()
+		IsMouseOver = true
+	end))
+
+	table.insert(Connections, Container.MouseLeave:Connect(function()
+		IsMouseOver = false
+	end))
 
 	table.insert(Connections, Container.InputBegan:Connect(function(Input: InputObject)
 		if Input.UserInputType == Enum.UserInputType.MouseButton3 or Input.UserInputType == Enum.UserInputType.MouseButton2 then
@@ -109,11 +133,28 @@ function Canvas.Create(Config: CanvasConfig): CanvasInstance
 		end
 	end))
 
-	table.insert(Connections, Container.InputChanged:Connect(function(Input: InputObject)
+	table.insert(Connections, UserInputService.InputChanged:Connect(function(Input: InputObject)
 		if Input.UserInputType == Enum.UserInputType.MouseWheel then
+			if not IsMouseOver then
+				return
+			end
+
 			local MousePosition = UserInputService:GetMouseLocation()
+			local GuiInset = GuiService:GetGuiInset()
+			MousePosition = MousePosition - GuiInset
+
 			local ContainerPosition = Container.AbsolutePosition
 			local ContainerSize = Container.AbsoluteSize
+
+			local IsInsideCanvas = MousePosition.X >= ContainerPosition.X
+				and MousePosition.X <= ContainerPosition.X + ContainerSize.X
+				and MousePosition.Y >= ContainerPosition.Y
+				and MousePosition.Y <= ContainerPosition.Y + ContainerSize.Y
+
+			if not IsInsideCanvas then
+				return
+			end
+
 			local RelativeMousePosition = MousePosition - ContainerPosition - (ContainerSize / 2)
 
 			local OldZoom = Zoom

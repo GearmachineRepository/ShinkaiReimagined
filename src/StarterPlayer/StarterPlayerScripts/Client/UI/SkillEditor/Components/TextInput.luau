@@ -18,6 +18,7 @@ export type TextInputConfig = {
 	TextSize: number?,
 	ClearTextOnFocus: boolean?,
 	LayoutOrder: number?,
+	ZIndex: number?,
 	Parent: GuiObject?,
 	OnChanged: ((Text: string) -> ())?,
 	OnFocusLost: ((Text: string, EnterPressed: boolean) -> ())?,
@@ -34,6 +35,8 @@ export type TextInputInstance = {
 }
 
 function TextInput.Create(Config: TextInputConfig): TextInputInstance
+	local BaseZIndex = Config.ZIndex or Theme.ZIndex.Panel
+
 	local Container = Instance.new("Frame")
 	Container.Name = Config.Name or "TextInput"
 	Container.Size = Config.Size or UDim2.new(1, 0, 0, Theme.Sizes.InputHeight)
@@ -42,6 +45,7 @@ function TextInput.Create(Config: TextInputConfig): TextInputInstance
 	Container.BackgroundColor3 = Config.BackgroundColor or Theme.Colors.BackgroundDark
 	Container.BorderSizePixel = 0
 	Container.LayoutOrder = Config.LayoutOrder or 0
+	Container.ZIndex = BaseZIndex
 
 	Theme.ApplyCorner(Container, Theme.Sizes.BorderRadiusSmall)
 	local Stroke = Theme.ApplyStroke(Container, Theme.Colors.Border)
@@ -59,6 +63,7 @@ function TextInput.Create(Config: TextInputConfig): TextInputInstance
 	Input.TextSize = Config.TextSize or Theme.TextSizes.Default
 	Input.TextXAlignment = Enum.TextXAlignment.Left
 	Input.ClearTextOnFocus = Config.ClearTextOnFocus or false
+	Input.ZIndex = BaseZIndex + 1
 	Input.Parent = Container
 
 	if Config.Parent then

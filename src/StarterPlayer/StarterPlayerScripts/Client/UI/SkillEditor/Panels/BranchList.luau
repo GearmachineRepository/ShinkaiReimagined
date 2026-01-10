@@ -3,7 +3,6 @@
 local Theme = require(script.Parent.Parent.Theme)
 local Types = require(script.Parent.Parent.Types)
 local Panel = require(script.Parent.Parent.Components.Panel)
-local Button = require(script.Parent.Parent.Components.Button)
 
 local BranchList = {}
 
@@ -37,12 +36,14 @@ function BranchList.Create(Config: BranchListConfig): BranchListInstance
 		BorderColor = Theme.Colors.Border,
 		Parent = Config.Parent,
 	})
+	Container.ZIndex = Theme.ZIndex.Panel
 
 	local Header = Instance.new("Frame")
 	Header.Name = "Header"
 	Header.Size = UDim2.new(1, 0, 0, 36)
 	Header.BackgroundColor3 = Theme.Colors.BackgroundDark
 	Header.BorderSizePixel = 0
+	Header.ZIndex = Theme.ZIndex.Panel
 	Header.Parent = Container
 
 	local HeaderTitle = Instance.new("TextLabel")
@@ -55,22 +56,39 @@ function BranchList.Create(Config: BranchListConfig): BranchListInstance
 	HeaderTitle.FontFace = Theme.Fonts.Bold
 	HeaderTitle.TextSize = Theme.TextSizes.Default
 	HeaderTitle.TextXAlignment = Enum.TextXAlignment.Left
+	HeaderTitle.ZIndex = Theme.ZIndex.Panel
 	HeaderTitle.Parent = Header
 
-	local AddButton = Button.Create({
-		Name = "Add",
-		Text = "+",
-		Size = UDim2.fromOffset(28, 28),
-		Position = UDim2.new(1, -32, 0.5, 0),
-		AnchorPoint = Vector2.new(0, 0.5),
-		BackgroundColor = Theme.Colors.Success,
-		Parent = Header,
-		OnClick = function()
-			if Config.OnBranchCreated then
-				Config.OnBranchCreated("NewBranch")
-			end
-		end,
-	})
+	local AddButton = Instance.new("TextButton")
+	AddButton.Name = "AddButton"
+	AddButton.Size = UDim2.fromOffset(28, 28)
+	AddButton.Position = UDim2.new(1, -32, 0.5, 0)
+	AddButton.AnchorPoint = Vector2.new(0, 0.5)
+	AddButton.BackgroundColor3 = Theme.Colors.Success
+	AddButton.BorderSizePixel = 0
+	AddButton.Text = "+"
+	AddButton.TextColor3 = Theme.Colors.Text
+	AddButton.FontFace = Theme.Fonts.Bold
+	AddButton.TextSize = Theme.TextSizes.Large
+	AddButton.AutoButtonColor = false
+	AddButton.ZIndex = Theme.ZIndex.Panel + 1
+	AddButton.Parent = Header
+
+	Theme.ApplyCorner(AddButton, Theme.Sizes.BorderRadiusSmall)
+
+	AddButton.MouseEnter:Connect(function()
+		AddButton.BackgroundColor3 = Color3.fromRGB(100, 200, 140)
+	end)
+
+	AddButton.MouseLeave:Connect(function()
+		AddButton.BackgroundColor3 = Theme.Colors.Success
+	end)
+
+	AddButton.MouseButton1Click:Connect(function()
+		if Config.OnBranchCreated then
+			Config.OnBranchCreated("NewBranch")
+		end
+	end)
 
 	local ContentScroll = Panel.CreateScrollable({
 		Name = "Content",
@@ -80,6 +98,7 @@ function BranchList.Create(Config: BranchListConfig): BranchListInstance
 		Padding = Theme.Sizes.PaddingSmall,
 		Parent = Container,
 	})
+	ContentScroll.ZIndex = Theme.ZIndex.Panel
 
 	Theme.ApplyListLayout(ContentScroll, Enum.FillDirection.Vertical, UDim.new(0, 2))
 
@@ -93,97 +112,159 @@ function BranchList.Create(Config: BranchListConfig): BranchListInstance
 		table.clear(BranchButtons)
 	end
 
-	local function CreateBranchButton(BranchData: Types.BranchData, LayoutOrder: number)
-		local BranchFrame = Instance.new("Frame")
-		BranchFrame.Name = "Branch_" .. BranchData.BranchId
-		BranchFrame.Size = UDim2.new(1, 0, 0, 32)
-		BranchFrame.BackgroundColor3 = Theme.Colors.Surface
-		BranchFrame.BorderSizePixel = 0
-		BranchFrame.LayoutOrder = LayoutOrder
-		BranchFrame.Parent = ContentScroll
+	local function RebuildBranchList()
+		ClearBranchButtons()
 
-		Theme.ApplyCorner(BranchFrame, Theme.Sizes.BorderRadiusSmall)
-		local Stroke = Theme.ApplyStroke(BranchFrame, Theme.Colors.Border)
+		local LayoutOrder = 0
+		for BranchId, BranchData in Branches do
+			LayoutOrder = LayoutOrder + 1
 
-		if BranchData.IsEntry then
+			local BranchFrame = Instance.new("Frame")
+			BranchFrame.Name = "Branch_" .. BranchId
+			BranchFrame.Size = UDim2.new(1, 0, 0, 32)
+			BranchFrame.BackgroundColor3 = if BranchId == SelectedBranchId
+				then Theme.Colors.SurfaceActive
+				else Theme.Colors.Surface
+			BranchFrame.BorderSizePixel = 0
+			BranchFrame.LayoutOrder = LayoutOrder
+			BranchFrame.ZIndex = Theme.ZIndex.Panel
+			BranchFrame.Parent = ContentScroll
+
+			Theme.ApplyCorner(BranchFrame, Theme.Sizes.BorderRadiusSmall)
+
 			local EntryIndicator = Instance.new("Frame")
 			EntryIndicator.Name = "EntryIndicator"
 			EntryIndicator.Size = UDim2.new(0, 4, 1, -4)
 			EntryIndicator.Position = UDim2.fromOffset(2, 2)
-			EntryIndicator.BackgroundColor3 = Theme.Colors.Success
+			EntryIndicator.BackgroundColor3 = if BranchData.IsEntry
+				then Theme.Colors.Success
+				else Theme.Colors.TextDisabled
 			EntryIndicator.BorderSizePixel = 0
+			EntryIndicator.ZIndex = Theme.ZIndex.Panel
 			EntryIndicator.Parent = BranchFrame
+
 			Theme.ApplyCorner(EntryIndicator, UDim.new(0, 2))
-		end
 
-		local NameLabel = Instance.new("TextLabel")
-		NameLabel.Name = "Name"
-		NameLabel.Size = UDim2.new(1, -40, 1, 0)
-		NameLabel.Position = UDim2.fromOffset(12, 0)
-		NameLabel.BackgroundTransparency = 1
-		NameLabel.Text = BranchData.BranchName
-		NameLabel.TextColor3 = Theme.Colors.Text
-		NameLabel.FontFace = Theme.Fonts.Default
-		NameLabel.TextSize = Theme.TextSizes.Small
-		NameLabel.TextXAlignment = Enum.TextXAlignment.Left
-		NameLabel.TextTruncate = Enum.TextTruncate.AtEnd
-		NameLabel.Parent = BranchFrame
+			local BranchLabel = Instance.new("TextLabel")
+			BranchLabel.Name = "Label"
+			BranchLabel.Size = UDim2.new(1, -48, 1, 0)
+			BranchLabel.Position = UDim2.fromOffset(12, 0)
+			BranchLabel.BackgroundTransparency = 1
+			BranchLabel.Text = BranchData.BranchName
+			BranchLabel.TextColor3 = Theme.Colors.Text
+			BranchLabel.FontFace = Theme.Fonts.Default
+			BranchLabel.TextSize = Theme.TextSizes.Small
+			BranchLabel.TextXAlignment = Enum.TextXAlignment.Left
+			BranchLabel.TextTruncate = Enum.TextTruncate.AtEnd
+			BranchLabel.ZIndex = Theme.ZIndex.Panel
+			BranchLabel.Parent = BranchFrame
 
-		local ClickDetector = Instance.new("TextButton")
-		ClickDetector.Name = "ClickDetector"
-		ClickDetector.Size = UDim2.fromScale(1, 1)
-		ClickDetector.BackgroundTransparency = 1
-		ClickDetector.Text = ""
-		ClickDetector.Parent = BranchFrame
+			local RenameInput = Instance.new("TextBox")
+			RenameInput.Name = "RenameInput"
+			RenameInput.Size = UDim2.new(1, -48, 1, -4)
+			RenameInput.Position = UDim2.fromOffset(12, 2)
+			RenameInput.BackgroundColor3 = Theme.Colors.BackgroundDark
+			RenameInput.Text = BranchData.BranchName
+			RenameInput.TextColor3 = Theme.Colors.Text
+			RenameInput.FontFace = Theme.Fonts.Default
+			RenameInput.TextSize = Theme.TextSizes.Small
+			RenameInput.TextXAlignment = Enum.TextXAlignment.Left
+			RenameInput.ClearTextOnFocus = false
+			RenameInput.Visible = false
+			RenameInput.ZIndex = Theme.ZIndex.Panel + 1
+			RenameInput.Parent = BranchFrame
 
-		local Connections: { RBXScriptConnection } = {}
+			Theme.ApplyCorner(RenameInput, Theme.Sizes.BorderRadiusSmall)
 
-		table.insert(Connections, ClickDetector.MouseEnter:Connect(function()
-			if SelectedBranchId ~= BranchData.BranchId then
-				BranchFrame.BackgroundColor3 = Theme.Colors.SurfaceHover
-			end
-		end))
+			local DeleteButton = Instance.new("TextButton")
+			DeleteButton.Name = "Delete"
+			DeleteButton.Size = UDim2.fromOffset(20, 20)
+			DeleteButton.Position = UDim2.new(1, -24, 0.5, 0)
+			DeleteButton.AnchorPoint = Vector2.new(0, 0.5)
+			DeleteButton.BackgroundColor3 = Theme.Colors.Error
+			DeleteButton.BorderSizePixel = 0
+			DeleteButton.Text = "×"
+			DeleteButton.TextColor3 = Theme.Colors.Text
+			DeleteButton.FontFace = Theme.Fonts.Bold
+			DeleteButton.TextSize = Theme.TextSizes.Default
+			DeleteButton.AutoButtonColor = false
+			DeleteButton.ZIndex = Theme.ZIndex.Panel + 1
+			DeleteButton.Parent = BranchFrame
 
-		table.insert(Connections, ClickDetector.MouseLeave:Connect(function()
-			if SelectedBranchId ~= BranchData.BranchId then
-				BranchFrame.BackgroundColor3 = Theme.Colors.Surface
-			end
-		end))
+			Theme.ApplyCorner(DeleteButton, Theme.Sizes.BorderRadiusSmall)
 
-		table.insert(Connections, ClickDetector.MouseButton1Click:Connect(function()
-			if Config.OnBranchSelected then
-				Config.OnBranchSelected(BranchData.BranchId)
-			end
-		end))
+			local ClickDetector = Instance.new("TextButton")
+			ClickDetector.Name = "ClickDetector"
+			ClickDetector.Size = UDim2.new(1, -30, 1, 0)
+			ClickDetector.Position = UDim2.fromOffset(0, 0)
+			ClickDetector.BackgroundTransparency = 1
+			ClickDetector.Text = ""
+			ClickDetector.ZIndex = Theme.ZIndex.Panel
+			ClickDetector.Parent = BranchFrame
 
-		BranchButtons[BranchData.BranchId] = {
-			Frame = BranchFrame,
-			Connections = Connections,
-		}
+			local Connections: { RBXScriptConnection } = {}
+			local LastClickTime = 0
 
-		if SelectedBranchId == BranchData.BranchId then
-			BranchFrame.BackgroundColor3 = Theme.Colors.SurfaceActive
-			Stroke.Color = Theme.Colors.BorderFocus
-		end
-	end
+			table.insert(Connections, ClickDetector.MouseButton1Click:Connect(function()
+				local CurrentTime = tick()
+				local TimeSinceLastClick = CurrentTime - LastClickTime
+				LastClickTime = CurrentTime
 
-	local function RebuildList()
-		ClearBranchButtons()
+				if TimeSinceLastClick < 0.3 then
+					BranchLabel.Visible = false
+					RenameInput.Visible = true
+					RenameInput.Text = BranchData.BranchName
+					RenameInput:CaptureFocus()
+				else
+					if Config.OnBranchSelected then
+						Config.OnBranchSelected(BranchId)
+					end
+				end
+			end))
 
-		local SortedBranches: { Types.BranchData } = {}
-		for _, BranchData in Branches do
-			table.insert(SortedBranches, BranchData)
-		end
+			table.insert(Connections, RenameInput.FocusLost:Connect(function(_EnterPressed: boolean)
+				RenameInput.Visible = false
+				BranchLabel.Visible = true
 
-		table.sort(SortedBranches, function(BranchA, BranchB)
-			if BranchA.IsEntry ~= BranchB.IsEntry then
-				return BranchA.IsEntry
-			end
-			return BranchA.BranchName < BranchB.BranchName
-		end)
+				local NewName = RenameInput.Text
+				if NewName ~= "" and NewName ~= BranchData.BranchName then
+					BranchLabel.Text = NewName
+					if Config.OnBranchRenamed then
+						Config.OnBranchRenamed(BranchId, NewName)
+					end
+				end
+			end))
 
-		for Index, BranchData in SortedBranches do
-			CreateBranchButton(BranchData, Index)
+			table.insert(Connections, ClickDetector.MouseEnter:Connect(function()
+				if BranchId ~= SelectedBranchId then
+					BranchFrame.BackgroundColor3 = Theme.Colors.SurfaceHover
+				end
+			end))
+
+			table.insert(Connections, ClickDetector.MouseLeave:Connect(function()
+				if BranchId ~= SelectedBranchId then
+					BranchFrame.BackgroundColor3 = Theme.Colors.Surface
+				end
+			end))
+
+			table.insert(Connections, DeleteButton.MouseButton1Click:Connect(function()
+				if Config.OnBranchDeleted then
+					Config.OnBranchDeleted(BranchId)
+				end
+			end))
+
+			table.insert(Connections, DeleteButton.MouseEnter:Connect(function()
+				DeleteButton.BackgroundColor3 = Theme.Colors.Warning
+			end))
+
+			table.insert(Connections, DeleteButton.MouseLeave:Connect(function()
+				DeleteButton.BackgroundColor3 = Theme.Colors.Error
+			end))
+
+			BranchButtons[BranchId] = {
+				Frame = BranchFrame,
+				Connections = Connections,
+			}
 		end
 	end
 
@@ -193,7 +274,7 @@ function BranchList.Create(Config: BranchListConfig): BranchListInstance
 
 	function Instance.SetBranches(NewBranches: { [string]: Types.BranchData })
 		Branches = NewBranches
-		RebuildList()
+		RebuildBranchList()
 	end
 
 	function Instance.SetSelectedBranch(BranchId: string?)
@@ -201,27 +282,16 @@ function BranchList.Create(Config: BranchListConfig): BranchListInstance
 		SelectedBranchId = BranchId
 
 		if OldSelected and BranchButtons[OldSelected] then
-			local OldButton = BranchButtons[OldSelected]
-			OldButton.Frame.BackgroundColor3 = Theme.Colors.Surface
-			local OldStroke = OldButton.Frame:FindFirstChildOfClass("UIStroke")
-			if OldStroke then
-				OldStroke.Color = Theme.Colors.Border
-			end
+			BranchButtons[OldSelected].Frame.BackgroundColor3 = Theme.Colors.Surface
 		end
 
 		if BranchId and BranchButtons[BranchId] then
-			local NewButton = BranchButtons[BranchId]
-			NewButton.Frame.BackgroundColor3 = Theme.Colors.SurfaceActive
-			local NewStroke = NewButton.Frame:FindFirstChildOfClass("UIStroke")
-			if NewStroke then
-				NewStroke.Color = Theme.Colors.BorderFocus
-			end
+			BranchButtons[BranchId].Frame.BackgroundColor3 = Theme.Colors.SurfaceActive
 		end
 	end
 
 	function Instance.Destroy()
 		ClearBranchButtons()
-		AddButton.Destroy()
 		Container:Destroy()
 	end
 

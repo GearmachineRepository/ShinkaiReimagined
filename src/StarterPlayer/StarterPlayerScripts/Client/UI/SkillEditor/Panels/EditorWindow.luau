@@ -1,6 +1,8 @@
 --!strict
 
 local HttpService = game:GetService("HttpService")
+local UserInputService = game:GetService("UserInputService")
+local GuiService = game:GetService("GuiService")
 
 local Theme = require(script.Parent.Parent.Theme)
 local Types = require(script.Parent.Parent.Types)
@@ -12,14 +14,17 @@ local Toolbar = require(script.Parent.Toolbar)
 local NodePalette = require(script.Parent.NodePalette)
 local PropertyPanel = require(script.Parent.PropertyPanel)
 local BranchList = require(script.Parent.BranchList)
+local Modal = require(script.Parent.Parent.Components.Modal)
+local Notification = require(script.Parent.Parent.Components.Notification)
 
 local EditorWindow = {}
 
 export type EditorWindowConfig = {
 	Parent: GuiObject,
-	OnSave: ((SkillData: any) -> ())?,
+	OnSave: ((SkillData: any) -> boolean?)?,
 	OnTest: ((SkillData: any) -> ())?,
-	OnLoad: (() -> ())?,
+	OnLoad: ((SkillId: string) -> any?)?,
+	GetSkillsList: (() -> { { Id: string, Name: string } })?,
 }
 
 export type EditorWindowInstance = {
@@ -30,6 +35,8 @@ export type EditorWindowInstance = {
 	SetVisible: (Visible: boolean) -> (),
 	Destroy: () -> (),
 }
+
+local NODE_SPAWN_OFFSET = 40
 
 function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 	local State: Types.EditorState = {
@@ -57,6 +64,10 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		IsConnecting = false,
 	}
 
+	local SpawnCounter = 0
+
+	local EditorInstance: EditorWindowInstance = nil :: any
+
 	local Container = Instance.new("Frame")
 	Container.Name = "SkillEditor"
 	Container.Size = UDim2.fromScale(1, 1)
@@ -64,11 +75,22 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 	Container.BorderSizePixel = 0
 	Container.Parent = Config.Parent
 
+	local ModalBackground = Instance.new("TextButton")
+	ModalBackground.Name = "ModalBackground"
+	ModalBackground.Size = UDim2.fromScale(1, 1)
+	ModalBackground.BackgroundTransparency = 1
+	ModalBackground.Text = ""
+	ModalBackground.ZIndex = 0
+	ModalBackground.Modal = true
+	ModalBackground.Parent = Container
+
 	local ToolbarPanel: Toolbar.ToolbarInstance = nil :: any
 	local PalettePanel: NodePalette.NodePaletteInstance = nil :: any
 	local PropertiesPanel: PropertyPanel.PropertyPanelInstance = nil :: any
 	local BranchListPanel: BranchList.BranchListInstance = nil :: any
 	local CanvasInstance: Canvas.CanvasInstance = nil :: any
+
+	local EditorConnections: { RBXScriptConnection } = {}
 
 	local function MarkDirty()
 		State.IsDirty = true
@@ -98,32 +120,155 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 	end
 
 	local function UpdateWirePositions()
+		local Branch = GetCurrentBranch()
+		if not Branch then
+			return
+		end
+
 		for WireId, WireInstance in WireInstances do
 			local WireData: Types.WireInstance? = nil
-			local Branch = GetCurrentBranch()
-			if Branch then
-				for _, WireEntry in Branch.Wires do
-					if WireEntry.WireId == WireId then
-						WireData = WireEntry
-						break
-					end
+			for _, WireItem in Branch.Wires do
+				if WireItem.WireId == WireId then
+					WireData = WireItem
+					break
 				end
 			end
 
-			if WireData then
-				local FromNode = NodeInstances[WireData.FromNodeId]
-				local ToNode = NodeInstances[WireData.ToNodeId]
+			if not WireData then
+				continue
+			end
 
-				if FromNode and ToNode then
-					local FromPort = FromNode.GetPort(WireData.FromPortName)
-					local ToPort = ToNode.GetPort(WireData.ToPortName)
+			local FromNode = NodeInstances[WireData.FromNodeId]
+			local ToNode = NodeInstances[WireData.ToNodeId]
 
-					if FromPort and ToPort then
-						WireInstance.SetPositions(FromPort.GetWorldPosition(), ToPort.GetWorldPosition())
-					end
+			if not FromNode or not ToNode then
+				continue
+			end
+
+			local FromPort = FromNode.GetPort(WireData.FromPortName)
+			local ToPort = ToNode.GetPort(WireData.ToPortName)
+
+			if not FromPort or not ToPort then
+				continue
+			end
+
+			local StartPos = FromPort.GetWorldPosition()
+			local EndPos = ToPort.GetWorldPosition()
+
+			WireInstance.SetPositions(StartPos, EndPos)
+		end
+	end
+
+	local function UpdatePreviewWire()
+		if not ConnectionState.IsConnecting or not ConnectionState.PreviewWire then
+			return
+		end
+
+		local FromNodeId = ConnectionState.FromNodeId
+		local FromPortName = ConnectionState.FromPortName
+		if not FromNodeId or not FromPortName then
+			return
+		end
+
+		local FromNode = NodeInstances[FromNodeId]
+		if not FromNode then
+			return
+		end
+
+		local FromPort = FromNode.GetPort(FromPortName)
+		if not FromPort then
+			return
+		end
+
+		local StartPos = FromPort.GetWorldPosition()
+		local MousePosition = UserInputService:GetMouseLocation()
+		local GuiInset = GuiService:GetGuiInset()
+		MousePosition = MousePosition - GuiInset
+
+		ConnectionState.PreviewWire.SetPositions(StartPos, MousePosition)
+	end
+
+	local function CancelConnection()
+		if ConnectionState.PreviewWire then
+			ConnectionState.PreviewWire.Destroy()
+		end
+		ConnectionState.IsConnecting = false
+		ConnectionState.FromNodeId = nil
+		ConnectionState.FromPortName = nil
+		ConnectionState.FromPortType = nil
+		ConnectionState.FromDirection = nil
+		ConnectionState.PreviewWire = nil
+	end
+
+	local function DeleteNode(NodeId: string)
+		local Branch = GetCurrentBranch()
+		if not Branch then
+			return
+		end
+
+		local WiresToRemove: { string } = {}
+		for _, WireData in Branch.Wires do
+			if WireData.FromNodeId == NodeId or WireData.ToNodeId == NodeId then
+				table.insert(WiresToRemove, WireData.WireId)
+			end
+		end
+
+		for _, WireId in WiresToRemove do
+			local WireUI = WireInstances[WireId]
+			if WireUI then
+				WireUI.Destroy()
+				WireInstances[WireId] = nil
+			end
+
+			for Index, WireData in Branch.Wires do
+				if WireData.WireId == WireId then
+					table.remove(Branch.Wires, Index)
+					break
 				end
 			end
 		end
+
+		local NodeUI = NodeInstances[NodeId]
+		if NodeUI then
+			NodeUI.Destroy()
+			NodeInstances[NodeId] = nil
+		end
+
+		for Index, NodeData in Branch.Nodes do
+			if NodeData.NodeId == NodeId then
+				table.remove(Branch.Nodes, Index)
+				break
+			end
+		end
+
+		if State.SelectedNodeId == NodeId then
+			State.SelectedNodeId = nil
+			PropertiesPanel.SetNode(nil)
+		end
+
+		MarkDirty()
+	end
+
+	local function DeleteWire(WireId: string)
+		local Branch = GetCurrentBranch()
+		if not Branch then
+			return
+		end
+
+		local WireUI = WireInstances[WireId]
+		if WireUI then
+			WireUI.Destroy()
+			WireInstances[WireId] = nil
+		end
+
+		for Index, WireData in Branch.Wires do
+			if WireData.WireId == WireId then
+				table.remove(Branch.Wires, Index)
+				break
+			end
+		end
+
+		MarkDirty()
 	end
 
 	local function SelectNode(NodeId: string?)
@@ -160,23 +305,24 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 				ConnectionState.FromPortType = PortType
 				ConnectionState.FromDirection = Direction
 				ConnectionState.PreviewWire = Wire.CreatePreview(CanvasInstance.Content, PortType)
+				UpdatePreviewWire()
 			end,
 			OnPortConnectionEnd = function(NodeId: string, PortName: string)
 				if not ConnectionState.IsConnecting then
 					return
 				end
 				if ConnectionState.FromNodeId == NodeId then
+					CancelConnection()
 					return
 				end
 
 				local Branch = GetCurrentBranch()
 				if not Branch then
+					CancelConnection()
 					return
 				end
 
 				local FromDirection = ConnectionState.FromDirection
-				local _ToDirection: Types.PortDirection = if FromDirection == "Output" then "Input" else "Output"
-
 				local FromNodeId = ConnectionState.FromNodeId :: string
 				local FromPortName = ConnectionState.FromPortName :: string
 				local ToNodeId = NodeId
@@ -202,20 +348,16 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 					WireId = WireData.WireId,
 					WireType = WireData.WireType,
 					Parent = CanvasInstance.Content,
+					OnClick = function(ClickedWireId: string)
+						DeleteWire(ClickedWireId)
+					end,
+					CanInteract = function()
+						return not ConnectionState.IsConnecting
+					end,
 				})
 				WireInstances[WireData.WireId] = WireUI
 
-				if ConnectionState.PreviewWire then
-					ConnectionState.PreviewWire.Destroy()
-				end
-
-				ConnectionState.IsConnecting = false
-				ConnectionState.FromNodeId = nil
-				ConnectionState.FromPortName = nil
-				ConnectionState.FromPortType = nil
-				ConnectionState.FromDirection = nil
-				ConnectionState.PreviewWire = nil
-
+				CancelConnection()
 				UpdateWirePositions()
 				MarkDirty()
 			end,
@@ -238,6 +380,7 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		table.clear(WireInstances)
 
 		SelectNode(nil)
+		SpawnCounter = 0
 	end
 
 	local function RenderBranch(BranchId: string)
@@ -257,6 +400,12 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 				WireId = WireData.WireId,
 				WireType = WireData.WireType,
 				Parent = CanvasInstance.Content,
+				OnClick = function(ClickedWireId: string)
+					DeleteWire(ClickedWireId)
+				end,
+				CanInteract = function()
+					return not ConnectionState.IsConnecting
+				end,
 			})
 			WireInstances[WireData.WireId] = WireUI
 		end
@@ -291,6 +440,46 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		return BranchId
 	end
 
+	local function DeleteBranch(BranchId: string)
+		if not State.Branches[BranchId] then
+			return
+		end
+
+		if State.SelectedBranchId == BranchId then
+			ClearCanvas()
+			State.SelectedBranchId = nil
+		end
+
+		State.Branches[BranchId] = nil
+		BranchListPanel.SetBranches(State.Branches)
+
+		local FirstBranchId: string? = nil
+		for Id in State.Branches do
+			FirstBranchId = Id
+			break
+		end
+
+		if FirstBranchId then
+			SelectBranch(FirstBranchId)
+		end
+
+		MarkDirty()
+	end
+
+	local function GetSpawnPosition(): Vector2
+		local CanvasCenter = CanvasInstance.CanvasToWorld(Vector2.new(
+			CanvasInstance.Frame.AbsoluteSize.X / 2,
+			CanvasInstance.Frame.AbsoluteSize.Y / 2
+		))
+
+		local OffsetX = (SpawnCounter % 5) * (Theme.Sizes.NodeWidth + NODE_SPAWN_OFFSET)
+		local OffsetY = math.floor(SpawnCounter / 5) * 100
+
+		SpawnCounter = SpawnCounter + 1
+
+		return CanvasCenter + Vector2.new(OffsetX - 200, OffsetY - 100)
+	end
+
 	local function AddNodeToBranch(BlockType: string)
 		local Branch = GetCurrentBranch()
 		if not Branch then
@@ -298,14 +487,12 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 			SelectBranch(BranchId)
 			Branch = State.Branches[BranchId]
 		end
-        if not Branch then return end
+		if not Branch then
+			return
+		end
 
-		local CanvasCenter = CanvasInstance.CanvasToWorld(Vector2.new(
-			CanvasInstance.Frame.AbsoluteSize.X / 2,
-			CanvasInstance.Frame.AbsoluteSize.Y / 2
-		))
-
-		local NodeData = NodeFactory.CreateNodeInstance(BlockType, CanvasCenter)
+		local SpawnPosition = GetSpawnPosition()
+		local NodeData = NodeFactory.CreateNodeInstance(BlockType, SpawnPosition)
 		table.insert(Branch.Nodes, NodeData)
 
 		CreateNodeUI(NodeData)
@@ -321,27 +508,104 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		end
 	end
 
+	local function OnNodeDelete(NodeId: string)
+		DeleteNode(NodeId)
+	end
+
+	table.insert(EditorConnections, UserInputService.InputChanged:Connect(function(Input: InputObject)
+		if Input.UserInputType == Enum.UserInputType.MouseMovement then
+			UpdatePreviewWire()
+		end
+	end))
+
+	table.insert(EditorConnections, UserInputService.InputEnded:Connect(function(Input: InputObject)
+		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+			if ConnectionState.IsConnecting then
+				CancelConnection()
+			end
+		end
+	end))
+
+	local function ResetToNewSkill()
+		State.SkillId = ""
+		State.DisplayName = "New Skill"
+		State.Branches = {}
+		State.IsDirty = false
+		ToolbarPanel.SetSkillName("New Skill")
+		ToolbarPanel.SetDirty(false)
+		BranchListPanel.SetBranches({})
+		ClearCanvas()
+	end
+
 	ToolbarPanel = Toolbar.Create({
 		Parent = Container,
 		OnNew = function()
-			State.SkillId = ""
-			State.DisplayName = "New Skill"
-			State.Branches = {}
-			State.IsDirty = false
-			ToolbarPanel.SetSkillName("New Skill")
-			ToolbarPanel.SetDirty(false)
-			BranchListPanel.SetBranches({})
-			ClearCanvas()
+			if State.IsDirty then
+				Modal.Confirm({
+					Title = "Unsaved Changes",
+					Message = "You have unsaved changes. Are you sure you want to create a new skill?",
+					ConfirmText = "Discard",
+					ConfirmColor = Theme.Colors.Error,
+					Parent = Container,
+					OnConfirm = function()
+						ResetToNewSkill()
+					end,
+				})
+			else
+				ResetToNewSkill()
+			end
 		end,
 		OnSave = function()
 			if Config.OnSave then
 				local SkillData = EditorWindow.ExportSkillData(State)
-				Config.OnSave(SkillData)
+				local Success = Config.OnSave(SkillData)
+				if Success ~= false then
+					State.IsDirty = false
+					ToolbarPanel.SetDirty(false)
+					Notification.Success("Skill saved successfully!", Container)
+				else
+					Notification.Error("Failed to save skill.", Container)
+				end
 			end
 		end,
 		OnLoad = function()
-			if Config.OnLoad then
-				Config.OnLoad()
+			local function ShowLoadModal()
+				local SkillsList = {}
+				if Config.GetSkillsList then
+					SkillsList = Config.GetSkillsList()
+				end
+
+				Modal.Select({
+					Title = "Load Skill",
+					Options = SkillsList,
+					Parent = Container,
+					OnSelected = function(SkillId: string)
+						if Config.OnLoad then
+							local SkillData = Config.OnLoad(SkillId)
+							if SkillData then
+								EditorInstance.LoadSkill(SkillData)
+								Notification.Success("Skill loaded!", Container)
+							else
+								Notification.Error("Failed to load skill.", Container)
+							end
+						end
+					end,
+				})
+			end
+
+			if State.IsDirty then
+				Modal.Confirm({
+					Title = "Unsaved Changes",
+					Message = "You have unsaved changes. Are you sure you want to load a different skill?",
+					ConfirmText = "Discard",
+					ConfirmColor = Theme.Colors.Error,
+					Parent = Container,
+					OnConfirm = function()
+						ShowLoadModal()
+					end,
+				})
+			else
+				ShowLoadModal()
 			end
 		end,
 		OnTest = function()
@@ -368,6 +632,7 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		Name = "Canvas",
 		Size = UDim2.new(1, -(Theme.Sizes.PanelWidth * 2), 1, 0),
 		Position = UDim2.fromOffset(Theme.Sizes.PanelWidth, 0),
+		GridImage = if Theme.Assets.GridImage ~= "" then Theme.Assets.GridImage else nil,
 		Parent = ContentArea,
 	})
 
@@ -381,6 +646,7 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 	PropertiesPanel = PropertyPanel.Create({
 		Parent = ContentArea,
 		OnPropertyChanged = OnPropertyChanged,
+		OnNodeDelete = OnNodeDelete,
 	})
 
 	BranchListPanel = BranchList.Create({
@@ -392,13 +658,23 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 			local BranchId = CreateBranch(BranchName)
 			SelectBranch(BranchId)
 		end,
+		OnBranchDeleted = function(BranchId: string)
+			DeleteBranch(BranchId)
+		end,
+		OnBranchRenamed = function(BranchId: string, NewName: string)
+			local Branch = State.Branches[BranchId]
+			if Branch then
+				Branch.BranchName = NewName
+				MarkDirty()
+			end
+		end,
 	})
 
-	local Instance: EditorWindowInstance = {
+	EditorInstance = {
 		Frame = Container,
 	} :: any
 
-	function Instance.LoadSkill(SkillData: any)
+	function EditorInstance.LoadSkill(SkillData: any)
 		State = EditorWindow.ImportSkillData(SkillData)
 		ToolbarPanel.SetSkillName(State.DisplayName)
 		ToolbarPanel.SetDirty(false)
@@ -420,38 +696,31 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		end
 	end
 
-	function Instance.NewSkill()
-		ToolbarPanel.Frame.Parent = nil
-		ToolbarPanel = Toolbar.Create({
-			Parent = Container,
-			OnNew = function() Instance.NewSkill() end,
-			OnSave = function()
-				if Config.OnSave then
-					Config.OnSave(EditorWindow.ExportSkillData(State))
-				end
-			end,
-			OnLoad = Config.OnLoad,
-			OnTest = function()
-				if Config.OnTest then
-					Config.OnTest(EditorWindow.ExportSkillData(State))
-				end
-			end,
-			OnNameChanged = function(Name)
-                State.DisplayName = Name
-                MarkDirty()
-            end,
-		})
+	function EditorInstance.NewSkill()
+		State.SkillId = ""
+		State.DisplayName = "New Skill"
+		State.Branches = {}
+		State.IsDirty = false
+		ToolbarPanel.SetSkillName("New Skill")
+		ToolbarPanel.SetDirty(false)
+		BranchListPanel.SetBranches({})
+		ClearCanvas()
 	end
 
-	function Instance.GetSkillData(): any
+	function EditorInstance.GetSkillData(): any
 		return EditorWindow.ExportSkillData(State)
 	end
 
-	function Instance.SetVisible(Visible: boolean)
+	function EditorInstance.SetVisible(Visible: boolean)
 		Container.Visible = Visible
 	end
 
-	function Instance.Destroy()
+	function EditorInstance.Destroy()
+		for _, Connection in EditorConnections do
+			Connection:Disconnect()
+		end
+		table.clear(EditorConnections)
+
 		ClearCanvas()
 		ToolbarPanel.Destroy()
 		PalettePanel.Destroy()
@@ -461,7 +730,7 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		Container:Destroy()
 	end
 
-	return Instance
+	return EditorInstance
 end
 
 function EditorWindow.ImportSkillData(SkillData: any): Types.EditorState

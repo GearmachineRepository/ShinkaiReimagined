@@ -80,6 +80,7 @@ Theme.Sizes = {
 
 	PanelWidth = 240,
 	ToolbarHeight = 40,
+	SafeAreaTop = 36,
 }
 
 Theme.Fonts = {
@@ -98,14 +99,23 @@ Theme.TextSizes = {
 Theme.ZIndex = {
 	Background = 1,
 	BranchContainer = 10,
-	Node = 20,
-	NodeSelected = 25,
 	Wire = 15,
-	WirePreview = 30,
-	Port = 22,
-	Tooltip = 100,
+	Node = 20,
+	NodeContent = 21,
+	Port = 25,
+	NodeHeader = 28,
+	NodeSelected = 30,
+	NodeSelectedContent = 31,
+	NodeSelectedHeader = 33,
+	WirePreview = 40,
+	Panel = 50,
 	Dropdown = 90,
+	Tooltip = 100,
 	Modal = 200,
+}
+
+Theme.Assets = {
+	GridImage = "rbxassetid://12796647774",
 }
 
 function Theme.ApplyCorner(Target: GuiObject, Radius: UDim?): UICorner

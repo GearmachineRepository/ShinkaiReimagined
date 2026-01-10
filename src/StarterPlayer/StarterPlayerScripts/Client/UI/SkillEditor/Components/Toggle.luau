@@ -15,6 +15,7 @@ export type ToggleConfig = {
 	Position: UDim2?,
 	AnchorPoint: Vector2?,
 	LayoutOrder: number?,
+	ZIndex: number?,
 	Parent: GuiObject?,
 	OnChanged: ((Value: boolean) -> ())?,
 }
@@ -28,6 +29,7 @@ export type ToggleInstance = {
 
 function Toggle.Create(Config: ToggleConfig): ToggleInstance
 	local CurrentValue = Config.Value or false
+	local BaseZIndex = Config.ZIndex or Theme.ZIndex.Panel
 
 	local Container = Instance.new("Frame")
 	Container.Name = Config.Name or "Toggle"
@@ -37,6 +39,7 @@ function Toggle.Create(Config: ToggleConfig): ToggleInstance
 	Container.BackgroundColor3 = if CurrentValue then Theme.Colors.Primary else Theme.Colors.BackgroundDark
 	Container.BorderSizePixel = 0
 	Container.LayoutOrder = Config.LayoutOrder or 0
+	Container.ZIndex = BaseZIndex
 
 	Theme.ApplyCorner(Container, UDim.new(0.5, 0))
 	Theme.ApplyStroke(Container, Theme.Colors.Border)
@@ -48,6 +51,7 @@ function Toggle.Create(Config: ToggleConfig): ToggleInstance
 	Knob.AnchorPoint = Vector2.new(0, 0.5)
 	Knob.BackgroundColor3 = Theme.Colors.Text
 	Knob.BorderSizePixel = 0
+	Knob.ZIndex = BaseZIndex + 1
 	Knob.Parent = Container
 
 	Theme.ApplyCorner(Knob, UDim.new(0.5, 0))
@@ -57,6 +61,7 @@ function Toggle.Create(Config: ToggleConfig): ToggleInstance
 	ClickDetector.Size = UDim2.fromScale(1, 1)
 	ClickDetector.BackgroundTransparency = 1
 	ClickDetector.Text = ""
+	ClickDetector.ZIndex = BaseZIndex + 2
 	ClickDetector.Parent = Container
 
 	if Config.Parent then

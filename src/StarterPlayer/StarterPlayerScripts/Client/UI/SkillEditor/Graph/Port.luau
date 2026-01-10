@@ -30,50 +30,77 @@ export type PortInstance = {
 
 function Port.Create(Config: PortConfig): PortInstance
 	local PortColor = if Config.PortType == "Flow" then Theme.Colors.PortFlow else Theme.Colors.PortSignal
+	local _IsConnected = false
+	local _IsHighlighted = false
 
 	local Container = Instance.new("Frame")
 	Container.Name = "Port_" .. Config.Name
-	Container.Size = UDim2.fromOffset(Theme.Sizes.NodePortHeight, Theme.Sizes.NodePortHeight)
+	Container.Size = UDim2.new(1, 0, 0, Theme.Sizes.NodePortHeight)
 	Container.BackgroundTransparency = 1
 	Container.BorderSizePixel = 0
+	Container.ZIndex = Theme.ZIndex.Port
 
 	local PortCircle = Instance.new("Frame")
 	PortCircle.Name = "Circle"
 	PortCircle.Size = UDim2.fromOffset(Theme.Sizes.NodePortRadius * 2, Theme.Sizes.NodePortRadius * 2)
-	PortCircle.Position = UDim2.fromScale(0.5, 0.5)
-	PortCircle.AnchorPoint = Vector2.new(0.5, 0.5)
 	PortCircle.BackgroundColor3 = PortColor
 	PortCircle.BorderSizePixel = 0
+	PortCircle.ZIndex = Theme.ZIndex.Port
+
+	if Config.Direction == "Input" then
+		PortCircle.Position = UDim2.new(0, 4, 0.5, 0)
+		PortCircle.AnchorPoint = Vector2.new(0, 0.5)
+	else
+		PortCircle.Position = UDim2.new(1, -4, 0.5, 0)
+		PortCircle.AnchorPoint = Vector2.new(1, 0.5)
+	end
 	PortCircle.Parent = Container
 
 	Theme.ApplyCorner(PortCircle, UDim.new(0.5, 0))
-	Theme.ApplyStroke(PortCircle, Theme.Colors.Border, 2)
 
-	local Label = Instance.new("TextLabel")
-	Label.Name = "Label"
-	Label.BackgroundTransparency = 1
-	Label.TextColor3 = Theme.Colors.TextMuted
-	Label.FontFace = Theme.Fonts.Default
-	Label.TextSize = Theme.TextSizes.Small
-	Label.Text = Config.Name
-	Label.Parent = Container
+	local PortLabel = Instance.new("TextLabel")
+	PortLabel.Name = "Label"
+	PortLabel.Size = UDim2.new(1, -24, 1, 0)
+	PortLabel.BackgroundTransparency = 1
+	PortLabel.Text = Config.Name
+	PortLabel.TextColor3 = Theme.Colors.Text
+	PortLabel.FontFace = Theme.Fonts.Default
+	PortLabel.TextSize = Theme.TextSizes.Small
+	PortLabel.ZIndex = Theme.ZIndex.Port
+
+	local HalvedPortRadius = Theme.Sizes.NodePortRadius/2
 
 	if Config.Direction == "Input" then
-		Label.Size = UDim2.new(0, 60, 1, 0)
-		Label.Position = UDim2.new(1, 4, 0, 0)
-		Label.TextXAlignment = Enum.TextXAlignment.Left
+		PortLabel.Position = UDim2.fromOffset(8, 0)
+		PortLabel.TextXAlignment = Enum.TextXAlignment.Left
 	else
-		Label.Size = UDim2.new(0, 60, 1, 0)
-		Label.Position = UDim2.fromOffset(-64, 0)
-		Label.TextXAlignment = Enum.TextXAlignment.Right
+		PortLabel.Position = UDim2.fromOffset(-8, 0)
+		PortLabel.Size = UDim2.new(1, -8, 1, 0)
+		PortLabel.TextXAlignment = Enum.TextXAlignment.Right
 	end
+
+	if Config.Direction == "Input" then
+		PortCircle.Position = UDim2.new(0, -HalvedPortRadius, 0.5, 0)
+		PortCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+	else
+		PortCircle.Position = UDim2.new(1, HalvedPortRadius, 0.5, 0)
+		PortCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+	end
+
+	PortLabel.Parent = Container
 
 	local ClickDetector = Instance.new("TextButton")
 	ClickDetector.Name = "ClickDetector"
-	ClickDetector.Size = UDim2.fromScale(1, 1)
+	ClickDetector.Size = UDim2.fromOffset(24, Theme.Sizes.NodePortHeight)
 	ClickDetector.BackgroundTransparency = 1
 	ClickDetector.Text = ""
-	ClickDetector.ZIndex = Theme.ZIndex.Port
+	ClickDetector.ZIndex = Theme.ZIndex.Port + 5
+
+	if Config.Direction == "Input" then
+		ClickDetector.Position = UDim2.fromOffset(-HalvedPortRadius - 6, 0)
+	else
+		ClickDetector.Position = UDim2.new(1, -12, 0, 0)
+	end
 	ClickDetector.Parent = Container
 
 	if Config.Parent then
@@ -82,30 +109,30 @@ function Port.Create(Config: PortConfig): PortInstance
 
 	local Connections: { RBXScriptConnection } = {}
 
-	table.insert(Connections, ClickDetector.MouseEnter:Connect(function()
-		PortCircle.Size = UDim2.fromOffset(Theme.Sizes.NodePortRadius * 2.5, Theme.Sizes.NodePortRadius * 2.5)
-		if Config.OnHover then
-			Config.OnHover(true)
-		end
-	end))
-
-	table.insert(Connections, ClickDetector.MouseLeave:Connect(function()
-		PortCircle.Size = UDim2.fromOffset(Theme.Sizes.NodePortRadius * 2, Theme.Sizes.NodePortRadius * 2)
-		if Config.OnHover then
-			Config.OnHover(false)
-		end
-	end))
-
 	table.insert(Connections, ClickDetector.MouseButton1Down:Connect(function()
 		if Config.OnConnectionStart then
-			Config.OnConnectionStart(Instance :: any)
+			Config.OnConnectionStart(nil :: any)
 		end
 	end))
 
 	table.insert(Connections, ClickDetector.MouseButton1Up:Connect(function()
 		if Config.OnConnectionEnd then
-			Config.OnConnectionEnd(Instance :: any)
+			Config.OnConnectionEnd(nil :: any)
 		end
+	end))
+
+	table.insert(Connections, ClickDetector.MouseEnter:Connect(function()
+		if Config.OnHover then
+			Config.OnHover(true)
+		end
+		PortCircle.Size = UDim2.fromOffset(Theme.Sizes.NodePortRadius * 2.5, Theme.Sizes.NodePortRadius * 2.5)
+	end))
+
+	table.insert(Connections, ClickDetector.MouseLeave:Connect(function()
+		if Config.OnHover then
+			Config.OnHover(false)
+		end
+		PortCircle.Size = UDim2.fromOffset(Theme.Sizes.NodePortRadius * 2, Theme.Sizes.NodePortRadius * 2)
 	end))
 
 	local Instance: PortInstance = {
@@ -117,33 +144,22 @@ function Port.Create(Config: PortConfig): PortInstance
 	} :: any
 
 	function Instance.GetWorldPosition(): Vector2
-		local AbsolutePosition = PortCircle.AbsolutePosition
-		local AbsoluteSize = PortCircle.AbsoluteSize
-		return AbsolutePosition + (AbsoluteSize / 2)
+		local CirclePosition = PortCircle.AbsolutePosition
+		local CircleSize = PortCircle.AbsoluteSize
+		return CirclePosition + (CircleSize / 2)
 	end
 
 	function Instance.SetHighlighted(Highlighted: boolean)
+		_IsHighlighted = Highlighted
 		if Highlighted then
-			local Stroke = PortCircle:FindFirstChildOfClass("UIStroke")
-			if Stroke then
-				Stroke.Color = Theme.Colors.BorderFocus
-				Stroke.Thickness = 3
-			end
+			PortCircle.BackgroundColor3 = Theme.Colors.BorderFocus
 		else
-			local Stroke = PortCircle:FindFirstChildOfClass("UIStroke")
-			if Stroke then
-				Stroke.Color = Theme.Colors.Border
-				Stroke.Thickness = 2
-			end
+			PortCircle.BackgroundColor3 = PortColor
 		end
 	end
 
 	function Instance.SetConnected(Connected: boolean)
-		if Connected then
-			PortCircle.BackgroundColor3 = PortColor
-		else
-			PortCircle.BackgroundColor3 = Theme.Colors.BackgroundDark
-		end
+		_IsConnected = Connected
 	end
 
 	function Instance.Destroy()

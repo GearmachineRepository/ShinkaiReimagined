@@ -27,18 +27,20 @@ local CATEGORIES = {
 function NodePalette.Create(Config: NodePaletteConfig): NodePaletteInstance
 	local Container = Panel.Create({
 		Name = "NodePalette",
-		Size = UDim2.new(0, Theme.Sizes.PanelWidth, 1, 0),
+		Size = UDim2.new(0, Theme.Sizes.PanelWidth, 1, -200),
 		Position = UDim2.new(0, 0, 0, 0),
 		BackgroundColor = Theme.Colors.Background,
 		BorderColor = Theme.Colors.Border,
 		Parent = Config.Parent,
 	})
+	Container.ZIndex = Theme.ZIndex.Panel
 
 	local Header = Instance.new("Frame")
 	Header.Name = "Header"
 	Header.Size = UDim2.new(1, 0, 0, 36)
 	Header.BackgroundColor3 = Theme.Colors.BackgroundDark
 	Header.BorderSizePixel = 0
+	Header.ZIndex = Theme.ZIndex.Panel
 	Header.Parent = Container
 
 	local HeaderTitle = Instance.new("TextLabel")
@@ -51,6 +53,7 @@ function NodePalette.Create(Config: NodePaletteConfig): NodePaletteInstance
 	HeaderTitle.FontFace = Theme.Fonts.Bold
 	HeaderTitle.TextSize = Theme.TextSizes.Default
 	HeaderTitle.TextXAlignment = Enum.TextXAlignment.Left
+	HeaderTitle.ZIndex = Theme.ZIndex.Panel
 	HeaderTitle.Parent = Header
 
 	local ContentScroll = Panel.CreateScrollable({
@@ -61,6 +64,7 @@ function NodePalette.Create(Config: NodePaletteConfig): NodePaletteInstance
 		Padding = Theme.Sizes.PaddingSmall,
 		Parent = Container,
 	})
+	ContentScroll.ZIndex = Theme.ZIndex.Panel
 
 	Theme.ApplyListLayout(ContentScroll, Enum.FillDirection.Vertical, Theme.Sizes.GapSmall)
 
@@ -76,6 +80,7 @@ function NodePalette.Create(Config: NodePaletteConfig): NodePaletteInstance
 		CategoryFrame.AutomaticSize = Enum.AutomaticSize.Y
 		CategoryFrame.BackgroundTransparency = 1
 		CategoryFrame.LayoutOrder = CategoryOrder
+		CategoryFrame.ZIndex = Theme.ZIndex.Panel
 		CategoryFrame.Parent = ContentScroll
 
 		local CategoryLayout = Instance.new("UIListLayout")
@@ -93,6 +98,7 @@ function NodePalette.Create(Config: NodePaletteConfig): NodePaletteInstance
 		CategoryLabel.TextSize = Theme.TextSizes.Small
 		CategoryLabel.TextXAlignment = Enum.TextXAlignment.Left
 		CategoryLabel.LayoutOrder = 0
+		CategoryLabel.ZIndex = Theme.ZIndex.Panel
 		CategoryLabel.Parent = CategoryFrame
 
 		for TypeIndex, BlockType in Category.Types do
@@ -107,7 +113,9 @@ function NodePalette.Create(Config: NodePaletteConfig): NodePaletteInstance
 			NodeButton.BackgroundColor3 = Theme.Colors.Surface
 			NodeButton.BorderSizePixel = 0
 			NodeButton.AutoButtonColor = false
+			NodeButton.Text = ""
 			NodeButton.LayoutOrder = TypeIndex
+			NodeButton.ZIndex = Theme.ZIndex.Panel
 			NodeButton.Parent = CategoryFrame
 
 			Theme.ApplyCorner(NodeButton, Theme.Sizes.BorderRadiusSmall)
@@ -118,6 +126,7 @@ function NodePalette.Create(Config: NodePaletteConfig): NodePaletteInstance
 			ColorBar.Position = UDim2.fromOffset(2, 2)
 			ColorBar.BackgroundColor3 = Definition.Color
 			ColorBar.BorderSizePixel = 0
+			ColorBar.ZIndex = Theme.ZIndex.Panel
 			ColorBar.Parent = NodeButton
 
 			Theme.ApplyCorner(ColorBar, UDim.new(0, 2))
@@ -132,6 +141,7 @@ function NodePalette.Create(Config: NodePaletteConfig): NodePaletteInstance
 			ButtonLabel.FontFace = Theme.Fonts.Default
 			ButtonLabel.TextSize = Theme.TextSizes.Small
 			ButtonLabel.TextXAlignment = Enum.TextXAlignment.Left
+			ButtonLabel.ZIndex = Theme.ZIndex.Panel
 			ButtonLabel.Parent = NodeButton
 
 			table.insert(Connections, NodeButton.MouseEnter:Connect(function()

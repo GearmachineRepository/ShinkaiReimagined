@@ -17,6 +17,7 @@ export type NumberInputConfig = {
 	Position: UDim2?,
 	AnchorPoint: Vector2?,
 	LayoutOrder: number?,
+	ZIndex: number?,
 	Parent: GuiObject?,
 	OnChanged: ((Value: number) -> ())?,
 }
@@ -35,6 +36,7 @@ function NumberInput.Create(Config: NumberInputConfig): NumberInputInstance
 	local MaxValue = Config.Max or math.huge
 	local StepValue = Config.Step or 1
 	local Precision = Config.Precision or 2
+	local BaseZIndex = Config.ZIndex or Theme.ZIndex.Panel
 
 	local Container = Instance.new("Frame")
 	Container.Name = Config.Name or "NumberInput"
@@ -44,6 +46,7 @@ function NumberInput.Create(Config: NumberInputConfig): NumberInputInstance
 	Container.BackgroundColor3 = Theme.Colors.BackgroundDark
 	Container.BorderSizePixel = 0
 	Container.LayoutOrder = Config.LayoutOrder or 0
+	Container.ZIndex = BaseZIndex
 
 	Theme.ApplyCorner(Container, Theme.Sizes.BorderRadiusSmall)
 	local Stroke = Theme.ApplyStroke(Container, Theme.Colors.Border)
@@ -58,7 +61,8 @@ function NumberInput.Create(Config: NumberInputConfig): NumberInputInstance
 	Input.FontFace = Theme.Fonts.Mono
 	Input.TextSize = Theme.TextSizes.Default
 	Input.TextXAlignment = Enum.TextXAlignment.Left
-	Input.ClearTextOnFocus = true
+	Input.ClearTextOnFocus = false
+	Input.ZIndex = BaseZIndex + 1
 	Input.Parent = Container
 
 	if Config.Parent then

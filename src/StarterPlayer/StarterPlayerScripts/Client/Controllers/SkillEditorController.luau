@@ -9,10 +9,10 @@ local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Packages = require(Shared.Packages)
-local Packets = require(Shared.Network.Packets)
 
 local Client = LocalPlayer.PlayerScripts:WaitForChild("Client")
 local SkillEditor = require(Client.UI.SkillEditor)
+local PlayerSkillController = require(Client.Controllers.PlayerSkillController)
 
 local Trove = Packages.Trove
 local Signal = Packages.Signal
@@ -30,36 +30,51 @@ local ControllerTrove: typeof(Trove.new()) = nil :: any
 local ScreenGui: ScreenGui = nil :: any
 local EditorInstance: SkillEditor.EditorWindowInstance? = nil
 local IsOpen = false
-local CachedSkills: { [string]: any } = {}
 
-local TOGGLE_KEY = Enum.KeyCode.F4
+local TOGGLE_KEY = Enum.KeyCode.T
 
 local function CreateScreenGui(): ScreenGui
 	local Gui = Instance.new("ScreenGui")
 	Gui.Name = "SkillEditorGui"
 	Gui.ResetOnSpawn = false
-	Gui.IgnoreGuiInset = true
+	Gui.IgnoreGuiInset = false
 	Gui.DisplayOrder = 100
 	Gui.Enabled = false
 	Gui.Parent = PlayerGui
 	return Gui
 end
 
-local function OnSave(SkillData: any)
+local PreviousMouseBehavior: Enum.MouseBehavior = Enum.MouseBehavior.Default
+
+local function LockMouse()
+	PreviousMouseBehavior = UserInputService.MouseBehavior
+	UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+end
+
+local function UnlockMouse()
+	UserInputService.MouseBehavior = PreviousMouseBehavior
+end
+
+local function OnSave(SkillData: any): boolean
 	if not SkillData then
-		return
+		return false
 	end
 
 	local SkillId = SkillData.SkillId
-	local IsNewSkill = not SkillId or SkillId == "" or not CachedSkills[SkillId]
+	local IsNewSkill = not SkillId or SkillId == "" or not PlayerSkillController.GetSkill(SkillId)
 
+	local Success: boolean
 	if IsNewSkill then
-		Packets.PlayerSkillCreate:Fire(SkillData)
+		Success = PlayerSkillController.CreateSkill(SkillData)
 	else
-		Packets.PlayerSkillUpdate:Fire(SkillData)
+		Success = PlayerSkillController.UpdateSkill(SkillData)
 	end
 
-	SkillEditorController.SkillSaved:Fire(SkillData)
+	if Success then
+		SkillEditorController.SkillSaved:Fire(SkillData)
+	end
+
+	return Success
 end
 
 local function OnTest(SkillData: any)
@@ -68,20 +83,37 @@ local function OnTest(SkillData: any)
 	end
 
 	local SkillId = SkillData.SkillId
-	local IsNewSkill = not SkillId or SkillId == "" or not CachedSkills[SkillId]
+	local IsNewSkill = not SkillId or SkillId == "" or not PlayerSkillController.GetSkill(SkillId)
 
 	if IsNewSkill then
-		Packets.PlayerSkillCreate:Fire(SkillData)
+		PlayerSkillController.CreateSkill(SkillData)
 	else
-		Packets.PlayerSkillUpdate:Fire(SkillData)
+		PlayerSkillController.UpdateSkill(SkillData)
 	end
 
 	SkillEditorController.SkillTested:Fire(SkillData)
 end
 
-local function OnLoad()
-	-- PlayerSkillSync is sent automatically on join
-	-- This callback can open a skill picker modal
+local function OnLoad(SkillId: string): any?
+	return PlayerSkillController.GetSkill(SkillId)
+end
+
+local function GetSkillsList(): { { Id: string, Name: string } }
+	local AllSkills = PlayerSkillController.GetAllSkills()
+	local List = {}
+
+	for SkillId, SkillData in AllSkills do
+		table.insert(List, {
+			Id = SkillId,
+			Name = SkillData.DisplayName or SkillId,
+		})
+	end
+
+	table.sort(List, function(A, B)
+		return A.Name < B.Name
+	end)
+
+	return List
 end
 
 function SkillEditorController.Init()
@@ -91,13 +123,14 @@ function SkillEditorController.Init()
 end
 
 function SkillEditorController.Start()
-    local EditorValues = {
+	EditorInstance = SkillEditor.Create({
 		Parent = ScreenGui,
 		OnSave = OnSave,
 		OnTest = OnTest,
 		OnLoad = OnLoad,
-	} :: any
-	EditorInstance = SkillEditor.Create(EditorValues)
+		GetSkillsList = GetSkillsList,
+	} :: any)
+
 	ControllerTrove:Add(function()
 		if EditorInstance then
 			EditorInstance.Destroy()
@@ -109,31 +142,24 @@ function SkillEditorController.Start()
 		if GameProcessed then
 			return
 		end
+
 		if Input.KeyCode == TOGGLE_KEY then
 			SkillEditorController.Toggle()
 		end
 	end)
 
-	ControllerTrove:Connect(Packets.PlayerSkillSync.OnClientEvent :: any, function(Skills: { [string]: any })
-		CachedSkills = Skills
-	end)
-
-	ControllerTrove:Connect(Packets.PlayerSkillAdded.OnClientEvent :: any, function(SkillId: string, SkillData: any)
-		CachedSkills[SkillId] = SkillData
+	ControllerTrove:Connect(PlayerSkillController.SkillAdded :: any, function(SkillId: string, SkillData: any)
 		if EditorInstance then
 			local CurrentData = EditorInstance.GetSkillData()
 			if CurrentData and (not CurrentData.SkillId or CurrentData.SkillId == "") then
-				SkillData.SkillId = SkillId
-				EditorInstance.LoadSkill(SkillData)
+				local UpdatedData = table.clone(SkillData)
+				UpdatedData.SkillId = SkillId
+				EditorInstance.LoadSkill(UpdatedData)
 			end
 		end
 	end)
 
-	ControllerTrove:Connect(Packets.PlayerSkillRemoved.OnClientEvent :: any, function(SkillId: string)
-		CachedSkills[SkillId] = nil
-	end)
-
-	ControllerTrove:Connect(Packets.PlayerSkillCreateResult.OnClientEvent :: any, function(Success: boolean, Result: string)
+	ControllerTrove:Connect(PlayerSkillController.CreateResult :: any, function(Success: boolean, Result: string)
 		if Success then
 			print("[SkillEditor] Skill created:", Result)
 		else
@@ -141,7 +167,7 @@ function SkillEditorController.Start()
 		end
 	end)
 
-	ControllerTrove:Connect(Packets.PlayerSkillUpdateResult.OnClientEvent :: any, function(Success: boolean, Result: string)
+	ControllerTrove:Connect(PlayerSkillController.UpdateResult :: any, function(Success: boolean, Result: string)
 		if Success then
 			print("[SkillEditor] Skill updated:", Result)
 		else
@@ -160,6 +186,7 @@ function SkillEditorController.Open()
 	end
 
 	IsOpen = true
+	LockMouse()
 	ScreenGui.Enabled = true
 
 	if EditorInstance then
@@ -175,6 +202,7 @@ function SkillEditorController.Close()
 	end
 
 	IsOpen = false
+	UnlockMouse()
 	ScreenGui.Enabled = false
 
 	if EditorInstance then
@@ -202,6 +230,13 @@ function SkillEditorController.LoadSkill(SkillData: any)
 	end
 end
 
+function SkillEditorController.LoadSkillById(SkillId: string)
+	local SkillData = PlayerSkillController.GetSkill(SkillId)
+	if SkillData and EditorInstance then
+		EditorInstance.LoadSkill(SkillData)
+	end
+end
+
 function SkillEditorController.NewSkill()
 	if EditorInstance then
 		EditorInstance.NewSkill()
@@ -213,21 +248,6 @@ function SkillEditorController.GetCurrentSkillData(): any?
 		return EditorInstance.GetSkillData()
 	end
 	return nil
-end
-
-function SkillEditorController.GetCachedSkills(): { [string]: any }
-	return CachedSkills
-end
-
-function SkillEditorController.GetCachedSkill(SkillId: string): any?
-	return CachedSkills[SkillId]
-end
-
-function SkillEditorController.LoadSkillById(SkillId: string)
-	local SkillData = CachedSkills[SkillId]
-	if SkillData and EditorInstance then
-		EditorInstance.LoadSkill(SkillData)
-	end
 end
 
 return SkillEditorController

@@ -13,6 +13,7 @@ export type WireConfig = {
 	WireType: Types.PortType,
 	Parent: GuiObject?,
 	OnClick: ((WireId: string) -> ())?,
+	CanInteract: (() -> boolean)?,
 }
 
 export type WireInstance = {
@@ -39,6 +40,7 @@ function Wire.Create(Config: WireConfig): WireInstance
 	local WireColor = if Config.WireType == "Flow" then Theme.Colors.WireFlow else Theme.Colors.WireSignal
 	local StartPosition = Vector2.zero
 	local EndPosition = Vector2.new(100, 0)
+	local IsHighlighted = false
 
 	local Container = Instance.new("Frame")
 	Container.Name = "Wire_" .. Config.WireId
@@ -49,6 +51,7 @@ function Wire.Create(Config: WireConfig): WireInstance
 	Container.Parent = Config.Parent
 
 	local Segments: { Frame } = {}
+	local ClickDetectors: { TextButton } = {}
 
 	for Index = 1, BEZIER_SEGMENTS do
 		local Segment = Instance.new("Frame")
@@ -56,24 +59,86 @@ function Wire.Create(Config: WireConfig): WireInstance
 		Segment.BackgroundColor3 = WireColor
 		Segment.BorderSizePixel = 0
 		Segment.AnchorPoint = Vector2.new(0, 0.5)
+		Segment.ZIndex = Theme.ZIndex.Wire
 		Segment.Parent = Container
 
 		Theme.ApplyCorner(Segment, UDim.new(0.5, 0))
 
+		local ClickDetector = Instance.new("TextButton")
+		ClickDetector.Name = "Click_" .. Index
+		ClickDetector.Size = UDim2.new(1, 0, 0, 12)
+		ClickDetector.Position = UDim2.fromScale(0, 0.5)
+		ClickDetector.AnchorPoint = Vector2.new(0, 0.5)
+		ClickDetector.BackgroundTransparency = 1
+		ClickDetector.Text = ""
+		ClickDetector.ZIndex = Theme.ZIndex.Wire + 1
+		ClickDetector.Parent = Segment
+
+		ClickDetector.MouseEnter:Connect(function()
+			local CanInteract = Config.CanInteract
+			if CanInteract and not CanInteract() then
+				return
+			end
+			if not IsHighlighted then
+				for _, Seg in Segments do
+					Seg.BackgroundColor3 = Theme.Colors.BorderFocus
+				end
+			end
+		end)
+
+		ClickDetector.MouseLeave:Connect(function()
+			if not IsHighlighted then
+				for _, Seg in Segments do
+					Seg.BackgroundColor3 = WireColor
+				end
+			end
+		end)
+
+		ClickDetector.MouseButton1Click:Connect(function()
+			local CanInteract = Config.CanInteract
+			if CanInteract and not CanInteract() then
+				return
+			end
+			if Config.OnClick then
+				Config.OnClick(Config.WireId)
+			end
+		end)
+
 		table.insert(Segments, Segment)
+		table.insert(ClickDetectors, ClickDetector)
+	end
+
+	local function GetZoomScale(): number
+		local Parent = Container.Parent
+		if Parent then
+			local UIScaleObj = Parent:FindFirstChild("ZoomScale")
+			if UIScaleObj and UIScaleObj:IsA("UIScale") then
+				return UIScaleObj.Scale
+			end
+		end
+		return 1
 	end
 
 	local function UpdateWire()
-		local ControlOffset = math.abs(EndPosition.X - StartPosition.X) * 0.5
-		ControlOffset = math.max(ControlOffset, WIRE_CURVATURE)
-
-		local P0 = StartPosition
-		local P1 = StartPosition + Vector2.new(ControlOffset, 0)
-		local P2 = EndPosition - Vector2.new(ControlOffset, 0)
-		local P3 = EndPosition
+		local Zoom = GetZoomScale()
 
 		local Parent = Container.Parent :: GuiObject?
-		local ParentOffset = if Parent then Parent.AbsolutePosition else Vector2.zero
+		if not Parent then
+			return
+		end
+
+		local ParentAbsPos = Parent.AbsolutePosition
+
+		local AdjustedStart = (StartPosition - ParentAbsPos) / Zoom
+		local AdjustedEnd = (EndPosition - ParentAbsPos) / Zoom
+
+		local ControlOffset = math.abs(AdjustedEnd.X - AdjustedStart.X) * 0.5
+		ControlOffset = math.max(ControlOffset, WIRE_CURVATURE)
+
+		local P0 = AdjustedStart
+		local P1 = AdjustedStart + Vector2.new(ControlOffset, 0)
+		local P2 = AdjustedEnd - Vector2.new(ControlOffset, 0)
+		local P3 = AdjustedEnd
 
 		for Index, Segment in Segments do
 			local T0 = (Index - 1) / BEZIER_SEGMENTS
@@ -86,10 +151,8 @@ function Wire.Create(Config: WireConfig): WireInstance
 			local Length = Delta.Magnitude
 			local Angle = math.atan2(Delta.Y, Delta.X)
 
-			local LocalPosition = Point0 - ParentOffset
-
 			Segment.Size = UDim2.fromOffset(math.max(Length + 2, 4), Theme.Sizes.WireThickness)
-			Segment.Position = UDim2.fromOffset(LocalPosition.X, LocalPosition.Y)
+			Segment.Position = UDim2.fromOffset(Point0.X, Point0.Y)
 			Segment.Rotation = math.deg(Angle)
 		end
 	end
@@ -109,6 +172,7 @@ function Wire.Create(Config: WireConfig): WireInstance
 	end
 
 	function Instance.SetHighlighted(Highlighted: boolean)
+		IsHighlighted = Highlighted
 		local NewThickness = if Highlighted then Theme.Sizes.WireThicknessHover else Theme.Sizes.WireThickness
 		local NewColor = if Highlighted then Theme.Colors.BorderFocus else WireColor
 
@@ -131,6 +195,7 @@ function Wire.Create(Config: WireConfig): WireInstance
 			Segment:Destroy()
 		end
 		table.clear(Segments)
+		table.clear(ClickDetectors)
 		Container:Destroy()
 	end
 
@@ -138,11 +203,22 @@ function Wire.Create(Config: WireConfig): WireInstance
 end
 
 function Wire.CreatePreview(Parent: GuiObject, WireType: Types.PortType): WireInstance
-	return Wire.Create({
+	local PreviewWire = Wire.Create({
 		WireId = "Preview",
 		WireType = WireType,
 		Parent = Parent,
 	})
+
+	for _, Segment in PreviewWire.Frame:GetChildren() do
+		if Segment:IsA("Frame") then
+			Segment.BackgroundColor3 = Theme.Colors.WirePreview
+			Segment.ZIndex = Theme.ZIndex.WirePreview
+		end
+	end
+
+	PreviewWire.Frame.ZIndex = Theme.ZIndex.WirePreview
+
+	return PreviewWire
 end
 
 return Wire

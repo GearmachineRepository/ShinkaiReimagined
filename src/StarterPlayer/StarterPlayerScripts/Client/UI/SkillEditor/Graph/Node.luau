@@ -53,6 +53,7 @@ function Node.Create(Config: NodeConfig): NodeInstance
 	Container.BackgroundColor3 = Theme.Colors.Surface
 	Container.BorderSizePixel = 0
 	Container.ZIndex = Theme.ZIndex.Node
+	Container.ClipsDescendants = false
 
 	Theme.ApplyCorner(Container, Theme.Sizes.BorderRadiusSmall)
 	local Stroke = Theme.ApplyStroke(Container, Theme.Colors.Border)
@@ -62,6 +63,7 @@ function Node.Create(Config: NodeConfig): NodeInstance
 	Header.Size = UDim2.new(1, 0, 0, Theme.Sizes.NodeHeaderHeight)
 	Header.BackgroundColor3 = Config.Color
 	Header.BorderSizePixel = 0
+	Header.ZIndex = Theme.ZIndex.NodeHeader
 	Header.Parent = Container
 
 	local HeaderCorner = Instance.new("UICorner")
@@ -74,6 +76,7 @@ function Node.Create(Config: NodeConfig): NodeInstance
 	HeaderMask.Position = UDim2.new(0, 0, 1, -8)
 	HeaderMask.BackgroundColor3 = Config.Color
 	HeaderMask.BorderSizePixel = 0
+	HeaderMask.ZIndex = Theme.ZIndex.NodeHeader
 	HeaderMask.Parent = Header
 
 	local Title = Instance.new("TextLabel")
@@ -87,13 +90,24 @@ function Node.Create(Config: NodeConfig): NodeInstance
 	Title.TextSize = Theme.TextSizes.Small
 	Title.TextXAlignment = Enum.TextXAlignment.Left
 	Title.TextTruncate = Enum.TextTruncate.AtEnd
+	Title.ZIndex = Theme.ZIndex.NodeHeader
 	Title.Parent = Header
+
+	local BodyDragArea = Instance.new("TextButton")
+	BodyDragArea.Name = "BodyDragArea"
+	BodyDragArea.Size = UDim2.new(1, -48, 1, -Theme.Sizes.NodeHeaderHeight)
+	BodyDragArea.Position = UDim2.fromOffset(24, Theme.Sizes.NodeHeaderHeight)
+	BodyDragArea.BackgroundTransparency = 1
+	BodyDragArea.Text = ""
+	BodyDragArea.ZIndex = Theme.ZIndex.NodeContent
+	BodyDragArea.Parent = Container
 
 	local InputContainer = Instance.new("Frame")
 	InputContainer.Name = "Inputs"
 	InputContainer.Size = UDim2.new(0.5, 0, 1, -Theme.Sizes.NodeHeaderHeight)
 	InputContainer.Position = UDim2.fromOffset(0, Theme.Sizes.NodeHeaderHeight)
 	InputContainer.BackgroundTransparency = 1
+	InputContainer.ZIndex = Theme.ZIndex.NodeContent
 	InputContainer.Parent = Container
 
 	local InputLayout = Instance.new("UIListLayout")
@@ -107,6 +121,7 @@ function Node.Create(Config: NodeConfig): NodeInstance
 	OutputContainer.Size = UDim2.new(0.5, 0, 1, -Theme.Sizes.NodeHeaderHeight)
 	OutputContainer.Position = UDim2.new(0.5, 0, 0, Theme.Sizes.NodeHeaderHeight)
 	OutputContainer.BackgroundTransparency = 1
+	OutputContainer.ZIndex = Theme.ZIndex.NodeContent
 	OutputContainer.Parent = Container
 
 	local OutputLayout = Instance.new("UIListLayout")
@@ -169,17 +184,69 @@ function Node.Create(Config: NodeConfig): NodeInstance
 	local DragStartPosition = Vector2.zero
 	local DragStartMouse = Vector2.zero
 
+	local function GetZoomScale(): number
+		local Parent = Container.Parent
+		if Parent then
+			local UIScaleObj = Parent:FindFirstChild("ZoomScale")
+			if UIScaleObj and UIScaleObj:IsA("UIScale") then
+				return UIScaleObj.Scale
+			end
+		end
+		return 1
+	end
+
+	local function UpdateZIndex(Selected: boolean)
+		local BaseZ = if Selected then Theme.ZIndex.NodeSelected else Theme.ZIndex.Node
+		local HeaderZ = if Selected then Theme.ZIndex.NodeSelectedHeader else Theme.ZIndex.NodeHeader
+		local ContentZ = if Selected then Theme.ZIndex.NodeSelectedContent else Theme.ZIndex.NodeContent
+
+		Container.ZIndex = BaseZ
+		Header.ZIndex = HeaderZ
+		HeaderMask.ZIndex = HeaderZ
+		Title.ZIndex = HeaderZ
+		BodyDragArea.ZIndex = ContentZ
+		InputContainer.ZIndex = ContentZ
+		OutputContainer.ZIndex = ContentZ
+
+		for _, PortInst in Ports do
+			PortInst.Frame.ZIndex = ContentZ + 2
+			local Circle = PortInst.Frame:FindFirstChild("Circle")
+			if Circle and Circle:IsA("GuiObject") then
+				Circle.ZIndex = ContentZ + 2
+			end
+			local Label = PortInst.Frame:FindFirstChild("Label")
+			if Label and Label:IsA("GuiObject") then
+				Label.ZIndex = ContentZ + 2
+			end
+			local ClickDetector = PortInst.Frame:FindFirstChild("ClickDetector")
+			if ClickDetector and ClickDetector:IsA("GuiObject") then
+				ClickDetector.ZIndex = ContentZ + 3
+			end
+		end
+	end
+
+	UpdateZIndex(false)
+
+	local function StartDrag(Input: InputObject)
+		IsDragging = true
+		DragStartPosition = Position
+		DragStartMouse = Vector2.new(Input.Position.X, Input.Position.Y)
+		UpdateZIndex(true)
+
+		if Config.OnSelected then
+			Config.OnSelected(Config.NodeId)
+		end
+	end
+
 	table.insert(Connections, Header.InputBegan:Connect(function(Input: InputObject)
 		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-			IsDragging = true
-			DragStartPosition = Position
-			DragStartMouse = Vector2.new(Input.Position.X, Input.Position.Y)
+			StartDrag(Input)
+		end
+	end))
 
-			Container.ZIndex = Theme.ZIndex.NodeSelected
-
-			if Config.OnSelected then
-				Config.OnSelected(Config.NodeId)
-			end
+	table.insert(Connections, BodyDragArea.InputBegan:Connect(function(Input: InputObject)
+		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+			StartDrag(Input)
 		end
 	end))
 
@@ -187,16 +254,7 @@ function Node.Create(Config: NodeConfig): NodeInstance
 		if IsDragging and Input.UserInputType == Enum.UserInputType.MouseMovement then
 			local CurrentMouse = Vector2.new(Input.Position.X, Input.Position.Y)
 			local Delta = CurrentMouse - DragStartMouse
-
-			local Parent = Container.Parent :: GuiObject?
-			local Zoom = 1
-			if Parent and Parent:FindFirstAncestor("Canvas") then
-				local CanvasContent = Parent
-				Zoom = CanvasContent.Size.X.Scale
-				if Zoom == 0 then
-					Zoom = 1
-				end
-			end
+			local Zoom = GetZoomScale()
 
 			Position = DragStartPosition + (Delta / Zoom)
 			Container.Position = UDim2.fromOffset(Position.X, Position.Y)
@@ -211,7 +269,7 @@ function Node.Create(Config: NodeConfig): NodeInstance
 		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
 			IsDragging = false
 			if not IsSelected then
-				Container.ZIndex = Theme.ZIndex.Node
+				UpdateZIndex(false)
 			end
 		end
 	end))
@@ -236,11 +294,11 @@ function Node.Create(Config: NodeConfig): NodeInstance
 		if Selected then
 			Stroke.Color = Theme.Colors.BorderFocus
 			Stroke.Thickness = 2
-			Container.ZIndex = Theme.ZIndex.NodeSelected
+			UpdateZIndex(true)
 		else
 			Stroke.Color = Theme.Colors.Border
 			Stroke.Thickness = 1
-			Container.ZIndex = Theme.ZIndex.Node
+			UpdateZIndex(false)
 		end
 	end
 

@@ -18,6 +18,7 @@ export type ButtonConfig = {
 	TextSize: number?,
 	CornerRadius: UDim?,
 	LayoutOrder: number?,
+	ZIndex: number?,
 	Enabled: boolean?,
 	Parent: GuiObject?,
 	OnClick: (() -> ())?,
@@ -37,6 +38,7 @@ function Button.Create(Config: ButtonConfig): ButtonInstance
 	local ActiveColor = Config.ActiveColor or Theme.Colors.SurfaceActive
 	local TextColor = Config.TextColor or Theme.Colors.Text
 	local Enabled = if Config.Enabled ~= nil then Config.Enabled else true
+	local BaseZIndex = Config.ZIndex or Theme.ZIndex.Panel
 
 	local OnClickCallback = Config.OnClick
 
@@ -49,6 +51,7 @@ function Button.Create(Config: ButtonConfig): ButtonInstance
 	ButtonFrame.BorderSizePixel = 0
 	ButtonFrame.LayoutOrder = Config.LayoutOrder or 0
 	ButtonFrame.AutoButtonColor = false
+	ButtonFrame.ZIndex = BaseZIndex
 
 	ButtonFrame.Text = Config.Text or ""
 	ButtonFrame.TextColor3 = TextColor
@@ -152,6 +155,7 @@ export type IconButtonConfig = ButtonConfig & {
 
 function Button.CreateIcon(Config: IconButtonConfig): ButtonInstance
 	local BaseButton = Button.Create(Config)
+	local BaseZIndex = Config.ZIndex or Theme.ZIndex.Panel
 
 	if Config.Icon then
 		local IconImage = Instance.new("ImageLabel")
@@ -162,6 +166,7 @@ function Button.CreateIcon(Config: IconButtonConfig): ButtonInstance
 		IconImage.BackgroundTransparency = 1
 		IconImage.Image = Config.Icon
 		IconImage.ImageColor3 = Config.TextColor or Theme.Colors.Text
+		IconImage.ZIndex = BaseZIndex + 1
 		IconImage.Parent = BaseButton.Frame
 	end
 
