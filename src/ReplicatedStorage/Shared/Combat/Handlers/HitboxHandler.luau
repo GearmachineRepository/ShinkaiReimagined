@@ -6,11 +6,11 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Enums = require(Shared.Enums)
 local Packets = require(Shared.Network.Packets)
-local CombatTypes = require(Shared.Types.CombatTypes)
+local ActionTypes = require(Shared.Types.ActionTypes)
 
-type Block = CombatTypes.Block
-type ExecutionContext = CombatTypes.ExecutionContext
-type HandlerResult = CombatTypes.HandlerResult
+type Block = ActionTypes.Block
+type ExecutionContext = ActionTypes.ExecutionContext
+type HandlerResult = ActionTypes.HandlerResult
 
 local IsServer = RunService:IsServer()
 
@@ -92,7 +92,7 @@ function HitboxHandler.Execute(Block: Block, Context: ExecutionContext): Handler
 
 			if not IsServer then
 				Packets.HitCandidates:Fire(
-					Context.SkillDefinition.SkillId,
+					Context.ActionDefinition.ActionId,
 					Target.Name,
 					Damage,
 					Stun,
@@ -111,7 +111,7 @@ function HitboxHandler.Execute(Block: Block, Context: ExecutionContext): Handler
 	else
 		Context.EventBus:Publish(Enums.Combat.Hitbox.Missed, {
 			Entity = Context.Entity,
-			SkillId = Context.SkillDefinition.SkillId,
+			ActionId = Context.ActionDefinition.ActionId,
 		})
 
 		if Outputs and Outputs.OnMiss then

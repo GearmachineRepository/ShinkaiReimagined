@@ -17,7 +17,7 @@ export type ToolbarConfig = {
 
 export type ToolbarInstance = {
 	Frame: Frame,
-	SetSkillName: (Name: string) -> (),
+	SetActionName: (Name: string) -> (),
 	SetDirty: (Dirty: boolean) -> (),
 	SetTestEnabled: (Enabled: boolean) -> (),
 	Destroy: () -> (),
@@ -67,9 +67,9 @@ function Toolbar.Create(Config: ToolbarConfig): ToolbarInstance
 	RightPadding.Parent = RightSection
 
 	local NameInput = TextInput.Create({
-		Name = "SkillName",
-		Text = "New Skill",
-		PlaceholderText = "Skill Name",
+		Name = "ActionName",
+		Text = "New Action",
+		PlaceholderText = "Action Name",
 		Size = UDim2.fromOffset(200, 28),
 		Parent = LeftSection,
 		OnFocusLost = function(Text: string)
@@ -139,7 +139,7 @@ function Toolbar.Create(Config: ToolbarConfig): ToolbarInstance
 		Frame = Container,
 	} :: any
 
-	function ToolbarObj.SetSkillName(Name: string)
+	function ToolbarObj.SetActionName(Name: string)
 		NameInput.SetText(Name)
 	end
 

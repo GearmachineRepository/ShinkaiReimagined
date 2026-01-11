@@ -78,7 +78,9 @@ function NumberInput.Create(Config: NumberInputConfig): NumberInputInstance
 		if Precision == 0 then
 			return tostring(math.round(Value))
 		end
-		return string.format("%." .. Precision .. "f", Value)
+
+		local FormatString = ("%." .. Precision .. "f") :: any
+		return string.format(FormatString, Value)
 	end
 
 	local function ClampValue(Value: number): number

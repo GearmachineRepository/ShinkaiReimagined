@@ -25,7 +25,7 @@ local PortSchemas = {
         Outputs = {},
     },
 
-    Skill = {
+    Action = {
         Outputs = { "OnComplete" },
     },
 

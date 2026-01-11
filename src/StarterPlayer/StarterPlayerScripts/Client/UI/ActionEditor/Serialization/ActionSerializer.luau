@@ -7,7 +7,7 @@ local Theme = require(script.Parent.Parent.Theme)
 local Comment = require(script.Parent.Parent.Graph.Comment)
 local NodeFactory = require(script.Parent.Parent.Nodes.NodeFactory)
 
-local SkillSerializer = {}
+local ActionSerializer = {}
 
 local function SerializeWires(Wires: { Types.WireInstance }): { any }
 	local Serialized = {}
@@ -106,10 +106,10 @@ local function DeserializeComments(SerializedComments: { any }?): { Types.Commen
 	return Comments
 end
 
-function SkillSerializer.Import(SkillData: any): Types.EditorState
+function ActionSerializer.Import(ActionData: any): Types.EditorState
 	local State: Types.EditorState = {
-		SkillId = SkillData.SkillId or "",
-		DisplayName = SkillData.DisplayName or "Imported Skill",
+		ActionId = ActionData.ActionId or "",
+		DisplayName = ActionData.DisplayName or "Imported Action",
 		Branches = {},
 		SelectedNodeId = nil,
 		SelectedBranchId = nil,
@@ -120,7 +120,7 @@ function SkillSerializer.Import(SkillData: any): Types.EditorState
 		IsDirty = false,
 	}
 
-	local EditorData = SkillData.EditorData or {}
+	local EditorData = ActionData.EditorData or {}
 	local EditorWires = EditorData.Wires or {}
 	local EditorComments = EditorData.Comments or {}
 	local EditorBranchStarts = EditorData.BranchStarts or {}
@@ -148,7 +148,7 @@ function SkillSerializer.Import(SkillData: any): Types.EditorState
 		}
 	end
 
-	if SkillData.Timeline then
+	if ActionData.Timeline then
 		local BranchId = HttpService:GenerateGUID(false)
 		local Nodes: { Types.NodeInstance } = {}
 		local FallbackPositionX = 100
@@ -157,7 +157,7 @@ function SkillSerializer.Import(SkillData: any): Types.EditorState
 		table.insert(Nodes, BranchStartNode)
 		FallbackPositionX = FallbackPositionX + Theme.Sizes.NodeWidth + 40
 
-		for _, Block in SkillData.Timeline do
+		for _, Block in ActionData.Timeline do
 			local FallbackPosition = Vector2.new(FallbackPositionX, 0)
 			local NodeData = NodeFactory.BlockToNode(Block, FallbackPosition)
 			table.insert(Nodes, NodeData)
@@ -176,8 +176,8 @@ function SkillSerializer.Import(SkillData: any): Types.EditorState
 			Comments = BranchComments,
 			Position = Vector2.zero,
 		}
-	elseif SkillData.Branches then
-		for BranchName, BranchData in SkillData.Branches do
+	elseif ActionData.Branches then
+		for BranchName, BranchData in ActionData.Branches do
 			local BranchId = HttpService:GenerateGUID(false)
 			local Nodes: { Types.NodeInstance } = {}
 			local FallbackPositionX = 100
@@ -213,9 +213,9 @@ function SkillSerializer.Import(SkillData: any): Types.EditorState
 	return State
 end
 
-function SkillSerializer.Export(State: Types.EditorState): any
-	local SkillData: any = {
-		SkillId = State.SkillId,
+function ActionSerializer.Export(State: Types.EditorState): any
+	local ActionData: any = {
+		ActionId = State.ActionId,
 		DisplayName = State.DisplayName,
 		IsPlayerMade = true,
 	}
@@ -247,14 +247,14 @@ function SkillSerializer.Export(State: Types.EditorState): any
 						table.insert(Timeline, Block)
 					end
 				end
-				SkillData.Timeline = Timeline
+				ActionData.Timeline = Timeline
 				EditorWires["Main"] = SerializeWires(Branch.Wires)
 				EditorComments["Main"] = SerializeComments(Branch.Comments)
 				break
 			end
 		end
 	else
-		SkillData.Branches = {}
+		ActionData.Branches = {}
 		for _, Branch in State.Branches do
 			local Timeline = {}
 			for _, NodeData in Branch.Nodes do
@@ -271,7 +271,7 @@ function SkillSerializer.Export(State: Types.EditorState): any
 					table.insert(Timeline, Block)
 				end
 			end
-			SkillData.Branches[Branch.BranchName] = {
+			ActionData.Branches[Branch.BranchName] = {
 				Entry = Branch.IsEntry,
 				Timeline = Timeline,
 			}
@@ -280,20 +280,20 @@ function SkillSerializer.Export(State: Types.EditorState): any
 		end
 	end
 
-	SkillData.EditorData = {
+	ActionData.EditorData = {
 		Wires = EditorWires,
 		Comments = EditorComments,
 		BranchStarts = EditorBranchStarts,
 	}
 
-	return SkillData
+	return ActionData
 end
 
-function SkillSerializer.ToJson(SkillData: any): string
-	return HttpService:JSONEncode(SkillData)
+function ActionSerializer.ToJson(ActionData: any): string
+	return HttpService:JSONEncode(ActionData)
 end
 
-function SkillSerializer.FromJson(JsonString: string): any?
+function ActionSerializer.FromJson(JsonString: string): any?
 	local Success, Result = pcall(function()
 		return HttpService:JSONDecode(JsonString)
 	end)
@@ -305,4 +305,4 @@ function SkillSerializer.FromJson(JsonString: string): any?
 	return nil
 end
 
-return SkillSerializer
+return ActionSerializer

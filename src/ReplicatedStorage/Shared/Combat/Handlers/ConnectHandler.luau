@@ -4,11 +4,11 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Enums = require(Shared.Enums)
-local CombatTypes = require(Shared.Types.CombatTypes)
+local ActionTypes = require(Shared.Types.ActionTypes)
 
-type Block = CombatTypes.Block
-type ExecutionContext = CombatTypes.ExecutionContext
-type HandlerResult = CombatTypes.HandlerResult
+type Block = ActionTypes.Block
+type ExecutionContext = ActionTypes.ExecutionContext
+type HandlerResult = ActionTypes.HandlerResult
 
 local ConnectHandler = {}
 
@@ -17,7 +17,7 @@ function ConnectHandler.Execute(Block: Block, Context: ExecutionContext): Handle
 	local Duration = Block.Time or 1
 	local Range = Block.Range or 50
 
-	Context.EventBus:Publish(Enums.Combat.Connect.SignalSent, {
+	Context.EventBus:Publish(Enums.Combat.Signal.Emitted, {
 		Entity = Context.Entity,
 		SignalId = SignalId,
 		Duration = Duration,

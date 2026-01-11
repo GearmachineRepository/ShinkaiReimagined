@@ -4,7 +4,7 @@ return {
     Icon = "rbxassetid://123456",
     Slot = 4,
     Cooldown = 4,
-    SkillId = "AdvancedCombo",
+    ActionId = "AdvancedCombo",
     GroundOnly = true,
     RequiresTarget = false,
 }

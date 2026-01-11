@@ -1,7 +1,7 @@
 --!strict
 
 return {
-    SkillId = "AdvancedCombo",
+    ActionId = "AdvancedCombo",
     DisplayName = "Advanced Combo",
 
     Branches = {

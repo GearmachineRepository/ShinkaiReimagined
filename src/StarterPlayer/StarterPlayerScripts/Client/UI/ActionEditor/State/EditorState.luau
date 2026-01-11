@@ -21,8 +21,8 @@ local StateResetSignal = Signal.new()
 
 local function CreateDefaultState(): State
 	return {
-		SkillId = "",
-		DisplayName = "New Skill",
+		ActionId = "",
+		DisplayName = "New Action",
 		Branches = {},
 		SelectedNodeId = nil,
 		SelectedBranchId = nil,
@@ -65,12 +65,12 @@ function EditorState.IsDirty(): boolean
 	return CurrentState.IsDirty
 end
 
-function EditorState.GetSkillId(): string
-	return CurrentState.SkillId
+function EditorState.GetActionId(): string
+	return CurrentState.ActionId
 end
 
-function EditorState.SetSkillId(SkillId: string)
-	CurrentState.SkillId = SkillId
+function EditorState.SetActionId(ActionId: string)
+	CurrentState.ActionId = ActionId
 	EditorState.MarkDirty()
 end
 

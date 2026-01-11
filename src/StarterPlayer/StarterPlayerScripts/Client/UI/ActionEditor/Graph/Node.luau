@@ -243,7 +243,8 @@ function Node.Create(Config: NodeConfig): NodeInstance
 			if Gui == Container or Gui:IsDescendantOf(Container) then
 				return true
 			end
-			if Gui.Active and Gui:IsA("GuiObject") then
+			local GuiObject = Gui :: GuiObject
+			if GuiObject.Active and Gui:IsA("GuiObject") then
 				return false
 			end
 		end

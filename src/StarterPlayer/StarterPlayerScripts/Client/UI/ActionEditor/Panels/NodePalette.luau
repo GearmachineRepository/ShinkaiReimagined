@@ -23,13 +23,13 @@ local CATEGORIES = {
 	{ Name = "Combat", Types = { "Hitbox", "HitCancel", "AddHealth" } },
 	{ Name = "Effects", Types = { "Animation", "Sound", "Velocity" } },
 	{ Name = "Logic", Types = { "Signal", "AndGate", "OrGate", "NotGate", "Timer", "Counter" } },
-	{ Name = "Advanced", Types = { "Skill" } },
+	{ Name = "Advanced", Types = { "Action" } },
 }
 
 local COMMENT_DEFINITION = {
 	BlockType = "Comment",
 	DisplayName = "Comment",
-	Description = "A visual note for organizing and documenting your skill graph.",
+	Description = "A visual note for organizing and documenting your Action graph.",
 	Color = Color3.fromRGB(90, 90, 95),
 }
 

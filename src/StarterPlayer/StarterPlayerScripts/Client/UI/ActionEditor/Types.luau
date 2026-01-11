@@ -2,47 +2,22 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
-local CombatTypes = require(Shared.Types.CombatTypes)
+local BlockDefinitions = require(Shared.Combat.BlockDefinitions)
+local ActionTypes = require(Shared.Types.ActionTypes)
 
-export type PortDirection = "Input" | "Output"
-export type PortType = "Flow" | "Signal"
-
-export type PortDefinition = {
-	Name: string,
-	Direction: PortDirection,
-	PortType: PortType,
-	AllowMultiple: boolean?,
-}
-
-export type NodeDefinition = {
-	BlockType: string,
-	DisplayName: string,
-	Description: string?,
-	Color: Color3,
-	Icon: string?,
-	Ports: { PortDefinition },
-	Properties: { PropertyDefinition },
-}
-
-export type PropertyType = "String" | "Number" | "Boolean" | "Dropdown" | "Vector3" | "AssetId" | "BranchDropdown"
-
-export type PropertyDefinition = {
-	Key: string,
-	Label: string,
-	Type: PropertyType,
-	Default: any,
-	Min: number?,
-	Max: number?,
-	Options: { string }?,
-	Tooltip: string?,
-}
+export type PortDirection = BlockDefinitions.PortDirection
+export type PortType = BlockDefinitions.PortType
+export type PortDefinition = BlockDefinitions.PortDefinition
+export type PropertyType = BlockDefinitions.PropertyType
+export type PropertyDefinition = BlockDefinitions.PropertyDefinition
+export type NodeDefinition = BlockDefinitions.BlockDefinition
 
 export type NodeInstance = {
 	NodeId: string,
 	BlockType: string,
 	Position: Vector2,
 	Properties: { [string]: any },
-	Block: CombatTypes.Block?,
+	Block: ActionTypes.Block?,
 }
 
 export type WireInstance = {

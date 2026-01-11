@@ -3,10 +3,12 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
+local BlockDefinitions = require(script.Parent.BlockDefinitions)
 local Enums = require(Shared.Enums)
-local PortSchemas = require(script.Parent.PortSchemas)
 
-local SkillValidator = {}
+local ActionValidator = {}
+
+type BlockDefinition = BlockDefinitions.BlockDefinition
 
 local MAX_BLOCKS = 50
 local MAX_BRANCHES = 10
@@ -196,8 +198,8 @@ local function ValidateBlock(Block: any): any?
     elseif BlockType == "Branch" then
         Clean.BranchName = ValidateString(Block.BranchName, 32)
 
-    elseif BlockType == "Skill" then
-        Clean.SkillId = ValidateString(Block.SkillId, 32)
+    elseif BlockType == "Action" then
+        Clean.ActionId = ValidateString(Block.ActionId, 32)
         Clean.Speed = ValidateNumber(Block.Speed, 0.1, 3, 1)
         Clean.CancelLast = ValidateBoolean(Block.CancelLast, false)
         Clean.HoldFor = ValidateNumber(Block.HoldFor, 0, 5, 0)
@@ -402,38 +404,38 @@ local function ValidateEditorData(EditorData: any): any?
 	return Clean
 end
 
-function SkillValidator.Validate(RawSkill: any): any?
-    if type(RawSkill) ~= "table" then
+function ActionValidator.Validate(RawAction: any): any?
+    if type(RawAction) ~= "table" then
         return nil
     end
 
-    local SkillId = RawSkill.SkillId
-    if type(SkillId) ~= "string" then
-        SkillId = ""
-    elseif #SkillId > 64 then
-        SkillId = string.sub(SkillId, 1, 64)
+    local ActionId = RawAction.ActionId
+    if type(ActionId) ~= "string" then
+        ActionId = ""
+    elseif #ActionId > 64 then
+        ActionId = string.sub(ActionId, 1, 64)
     end
 
-    local DisplayName = ValidateString(RawSkill.DisplayName, 48)
+    local DisplayName = ValidateString(RawAction.DisplayName, 48)
     if not DisplayName then
         return nil
     end
 
     local Clean: { [string]: any } = {
-        SkillId = SkillId,
+        ActionId = ActionId,
         DisplayName = DisplayName,
         IsPlayerMade = true,
     }
 
-    if RawSkill.Timeline then
-        local Timeline = ValidateTimeline(RawSkill.Timeline)
+    if RawAction.Timeline then
+        local Timeline = ValidateTimeline(RawAction.Timeline)
         if not Timeline or #Timeline == 0 then
             return nil
         end
         Clean.Timeline = Timeline
 
-    elseif RawSkill.Branches then
-        if type(RawSkill.Branches) ~= "table" then
+    elseif RawAction.Branches then
+        if type(RawAction.Branches) ~= "table" then
             return nil
         end
 
@@ -441,7 +443,7 @@ function SkillValidator.Validate(RawSkill: any): any?
         local BranchCount = 0
         local HasEntry = false
 
-        for BranchName, BranchData in RawSkill.Branches do
+        for BranchName, BranchData in RawAction.Branches do
             if BranchCount >= MAX_BRANCHES then
                 break
             end
@@ -472,10 +474,10 @@ function SkillValidator.Validate(RawSkill: any): any?
         return nil
     end
 
-    if RawSkill.Conditions and type(RawSkill.Conditions) == "table" then
+    if RawAction.Conditions and type(RawAction.Conditions) == "table" then
         Clean.Conditions = {
-            OnAir = if type(RawSkill.Conditions.OnAir) == "boolean"
-                then RawSkill.Conditions.OnAir
+            OnAir = if type(RawAction.Conditions.OnAir) == "boolean"
+                then RawAction.Conditions.OnAir
                 else nil,
         }
     end
@@ -485,21 +487,25 @@ function SkillValidator.Validate(RawSkill: any): any?
         KnockbackMultiplier = 1,
     }
 
-    Clean.EditorData = ValidateEditorData(RawSkill.EditorData)
+    Clean.EditorData = ValidateEditorData(RawAction.EditorData)
 
     return Clean
 end
 
-function SkillValidator.ValidateBlock(Block: any): any?
+function ActionValidator.ValidateBlock(Block: any): any?
     return ValidateBlock(Block)
 end
 
-function SkillValidator.GetPortSchema(BlockType: string): { Outputs: { string } }?
-    return PortSchemas[BlockType]
+function ActionValidator.GetBlockDefinition(BlockType: string): BlockDefinition?
+	return BlockDefinitions.Get(BlockType)
 end
 
-function SkillValidator.GetAllPortSchemas(): { [string]: { Outputs: { string } } }
-    return PortSchemas
+function ActionValidator.GetAllBlockDefinitions(): { [string]: BlockDefinition }
+	return BlockDefinitions.GetAll()
 end
 
-return SkillValidator
+function ActionValidator.GetSignalOutputs(BlockType: string): { string }
+	return BlockDefinitions.GetSignalOutputs(BlockType)
+end
+
+return ActionValidator

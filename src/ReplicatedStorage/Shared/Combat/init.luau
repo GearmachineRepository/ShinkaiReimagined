@@ -2,12 +2,12 @@
 
 local Combat = {}
 
-Combat.SkillExecutor = require(script.SkillExecutor)
-Combat.SkillRegistry = require(script.SkillRegistry)
+Combat.ActionExecutor = require(script.ActionExecutor)
+Combat.ActionRegistry = require(script.ActionRegistry)
 Combat.ToolRegistry = require(script.ToolRegistry)
 Combat.ExecutionContext = require(script.ExecutionContext)
 Combat.Handlers = require(script.Handlers)
-Combat.SkillValidator = require(script.SkillValidator)
-Combat.PortSchemas = require(script.PortSchemas)
+Combat.ActionValidator = require(script.ActionValidator)
+Combat.BlockDefinitons = require(script.BlockDefinitions)
 
 return Combat

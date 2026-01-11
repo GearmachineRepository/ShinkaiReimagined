@@ -143,26 +143,26 @@ return {
 		Packet.Any
 	),
 
-	-- SKILL PACKETS
-    SkillActivate = Packet(
-        "SkillActivate",
+	-- Action PACKETS
+    ActionActivate = Packet(
+        "ActionActivate",
         Packet.String,
         Packet.NumberF64
     ),
 
-    SkillCancel = Packet(
-        "SkillCancel",
+    ActionCancel = Packet(
+        "ActionCancel",
         Packet.String
     ),
 
-    SkillRejected = Packet(
-        "SkillRejected",
+    ActionRejected = Packet(
+        "ActionRejected",
         Packet.String,
         Packet.String
     ),
 
-    SkillSync = Packet(
-        "SkillSync",
+    ActionSync = Packet(
+        "ActionSync",
         Packet.String,
         Packet.String,
         Packet.Boolean8
@@ -170,7 +170,7 @@ return {
 
 	HitCandidates = Packet(
 		"HitCandidates",
-		Packet.String,      -- SkillId
+		Packet.String,      -- ActionId
 		Packet.String,      -- TargetName
 		Packet.NumberF32,   -- Damage
 		Packet.NumberF32,   -- Stun
@@ -204,69 +204,69 @@ return {
         Packet.NumberF32
     ),
 
-	--PLAYER SKILLS
-    PlayerSkillCreate = Packet(
-        "PlayerSkillCreate",
-        Packet.Any                  -- RawSkill table
+	--PLAYER ActionS
+    PlayerActionCreate = Packet(
+        "PlayerActionCreate",
+        Packet.Any                  -- RawAction table
     ),
 
-    PlayerSkillCreateResult = Packet(
-        "PlayerSkillCreateResult",
+    PlayerActionCreateResult = Packet(
+        "PlayerActionCreateResult",
         Packet.Boolean8,            -- Success
-        Packet.String               -- SkillId or ErrorReason
+        Packet.String               -- ActionId or ErrorReason
     ),
 
-    PlayerSkillUpdate = Packet(
-        "PlayerSkillUpdate",
-        Packet.Any                  -- RawSkill table
+    PlayerActionUpdate = Packet(
+        "PlayerActionUpdate",
+        Packet.Any                  -- RawAction table
     ),
 
-    PlayerSkillUpdateResult = Packet(
-        "PlayerSkillUpdateResult",
+    PlayerActionUpdateResult = Packet(
+        "PlayerActionUpdateResult",
         Packet.Boolean8,            -- Success
-        Packet.String               -- SkillId or ErrorReason
+        Packet.String               -- ActionId or ErrorReason
     ),
 
-    PlayerSkillDelete = Packet(
-        "PlayerSkillDelete",
-        Packet.String               -- SkillId
+    PlayerActionDelete = Packet(
+        "PlayerActionDelete",
+        Packet.String               -- ActionId
     ),
 
-    PlayerSkillDeleteResult = Packet(
-        "PlayerSkillDeleteResult",
+    PlayerActionDeleteResult = Packet(
+        "PlayerActionDeleteResult",
         Packet.Boolean8,            -- Success
-        Packet.String               -- SkillId or ErrorReason
+        Packet.String               -- ActionId or ErrorReason
     ),
 
-    PlayerSkillEquip = Packet(
-        "PlayerSkillEquip",
-        Packet.String               -- SkillId
+    PlayerActionEquip = Packet(
+        "PlayerActionEquip",
+        Packet.String               -- ActionId
     ),
 
-    PlayerSkillEquipResult = Packet(
-        "PlayerSkillEquipResult",
+    PlayerActionEquipResult = Packet(
+        "PlayerActionEquipResult",
         Packet.Boolean8,            -- Success
-        Packet.String               -- SkillId or ErrorReason
+        Packet.String               -- ActionId or ErrorReason
     ),
 
-    PlayerSkillUnequip = Packet(
-        "PlayerSkillUnequip",
-        Packet.String               -- SkillId
+    PlayerActionUnequip = Packet(
+        "PlayerActionUnequip",
+        Packet.String               -- ActionId
     ),
 
-    PlayerSkillSync = Packet(
-        "PlayerSkillSync",
-        Packet.Any                  -- { [SkillId]: SkillData }
+    PlayerActionSync = Packet(
+        "PlayerActionSync",
+        Packet.Any                  -- { [ActionId]: ActionData }
     ),
 
-    PlayerSkillAdded = Packet(
-        "PlayerSkillAdded",
-        Packet.String,              -- SkillId
-        Packet.Any                  -- SkillData
+    PlayerActionAdded = Packet(
+        "PlayerActionAdded",
+        Packet.String,              -- ActionId
+        Packet.Any                  -- ActionData
     ),
 
-    PlayerSkillRemoved = Packet(
-        "PlayerSkillRemoved",
-        Packet.String               -- SkillId
+    PlayerActionRemoved = Packet(
+        "PlayerActionRemoved",
+        Packet.String               -- ActionId
     ),
 }

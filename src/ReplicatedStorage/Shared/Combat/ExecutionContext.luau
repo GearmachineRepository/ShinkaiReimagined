@@ -4,36 +4,36 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Packages = require(Shared.Packages)
-local CombatTypes = require(Shared.Types.CombatTypes)
+local ActionTypes = require(Shared.Types.ActionTypes)
 
 local TableUtil = Packages.TableUtil
 
-type ExecutionEntity = CombatTypes.ExecutionEntity
-type SkillDefinition = CombatTypes.SkillDefinition
-type SkillProperties = CombatTypes.SkillProperties
-type HitRecord = CombatTypes.HitRecord
-type ExecutionContext = CombatTypes.ExecutionContext
-type SignalState = CombatTypes.SignalState
-type EventBus = CombatTypes.EventBus
+type ExecutionEntity = ActionTypes.ExecutionEntity
+type ActionDefinition = ActionTypes.ActionDefinition
+type ActionProperties = ActionTypes.ActionProperties
+type HitRecord = ActionTypes.HitRecord
+type ExecutionContext = ActionTypes.ExecutionContext
+type SignalState = ActionTypes.SignalState
+type EventBus = ActionTypes.EventBus
 
 local ExecutionContextModule = {}
 
-local DEFAULT_PROPERTIES: SkillProperties = table.freeze({
+local DEFAULT_PROPERTIES = table.freeze({
 	DamageMultiplier = 1,
 	KnockbackMultiplier = 1,
 	Invincible = false,
-})
+}) :: ActionProperties
 
 function ExecutionContextModule.Create(
 	Entity: ExecutionEntity,
-	SkillDefinition: SkillDefinition,
+	ActionDefinition: ActionDefinition,
 	EventBus: any
 ): ExecutionContext
 	local StartTime = tick()
 
 	local Properties: any = TableUtil.Copy(DEFAULT_PROPERTIES)
-	if SkillDefinition.Properties then
-		Properties = TableUtil.Assign(Properties, SkillDefinition.Properties)
+	if ActionDefinition.Properties then
+		Properties = TableUtil.Assign(Properties, ActionDefinition.Properties)
 	end
 
 	local HitRecords: { HitRecord } = {}
@@ -141,7 +141,7 @@ function ExecutionContextModule.Create(
 
 	local Context: ExecutionContext = {
 		Entity = Entity,
-		SkillDefinition = SkillDefinition,
+		ActionDefinition = ActionDefinition,
 		EventBus = EventBus,
 		StartTime = StartTime,
 		Canceled = Canceled,

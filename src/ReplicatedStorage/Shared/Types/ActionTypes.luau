@@ -76,8 +76,8 @@ export type HitCancelBlock = Block & {
 	Branch: string?,
 }
 
-export type SkillBlock = Block & {
-	SkillId: string,
+export type ActionBlock = Block & {
+	ActionId: string,
 	Speed: number?,
 	CancelLast: boolean?,
 	HoldFor: number?,
@@ -127,13 +127,13 @@ export type AddHealthBlock = Block & {
 	Amount: number?,
 }
 
-export type SkillConditions = {
+export type ActionConditions = {
 	OnAir: boolean?,
 	HasTarget: boolean?,
 	Durability: number?,
 }
 
-export type SkillProperties = {
+export type ActionProperties = {
 	DamageMultiplier: number?,
 	KnockbackMultiplier: number?,
 	Invincible: boolean?,
@@ -144,13 +144,13 @@ export type Branch = {
 	Timeline: { Block },
 }
 
-export type SkillDefinition = {
-	SkillId: string,
+export type ActionDefinition = {
+	ActionId: string,
 	DisplayName: string?,
 	Timeline: { Block }?,
 	Branches: { [string]: Branch }?,
-	Conditions: SkillConditions?,
-	Properties: SkillProperties?,
+	Conditions: ActionConditions?,
+	Properties: ActionProperties?,
 }
 
 export type ToolDefinition = {
@@ -159,7 +159,7 @@ export type ToolDefinition = {
 	Icon: string,
 	DefaultSlot: number,
 	Cooldown: number,
-	SkillId: string,
+	ActionId: string,
 	GroundOnly: boolean?,
 	RequiresTarget: boolean?,
 }
@@ -178,11 +178,11 @@ export type SignalState = {
 
 export type ExecutionContext = {
 	Entity: ExecutionEntity,
-	SkillDefinition: SkillDefinition,
+	ActionDefinition: ActionDefinition,
 	EventBus: EventBus,
 	StartTime: number,
 	Canceled: boolean,
-	Properties: SkillProperties,
+	Properties: ActionProperties,
 	HitRecords: { HitRecord },
 	LastHitTarget: Model?,
 	Signals: SignalState,

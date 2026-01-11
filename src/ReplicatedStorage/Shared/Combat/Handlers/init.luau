@@ -3,9 +3,9 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
-local CombatTypes = require(Shared.Types.CombatTypes)
+local ActionTypes = require(Shared.Types.ActionTypes)
 
-type BlockHandler = CombatTypes.BlockHandler
+type BlockHandler = ActionTypes.BlockHandler
 
 local Handlers = {}
 

@@ -139,7 +139,8 @@ function Canvas.Create(Config: CanvasConfig): CanvasInstance
 							HitBackground = true
 							break
 						end
-						if Gui.Active and Gui:IsDescendantOf(Content) then
+						local GuiObject = Gui :: GuiObject
+						if GuiObject.Active and Gui:IsDescendantOf(Content) then
 							break
 						end
 					end

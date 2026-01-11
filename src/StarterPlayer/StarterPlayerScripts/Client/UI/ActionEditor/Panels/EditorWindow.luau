@@ -22,25 +22,25 @@ local BranchManager = require(script.Parent.Parent.State.BranchManager)
 local NodeManager = require(script.Parent.Parent.State.NodeManager)
 local WireManager = require(script.Parent.Parent.State.WireManager)
 local CommentManager = require(script.Parent.Parent.State.CommentManager)
-local SkillSerializer = require(script.Parent.Parent.Serialization.SkillSerializer)
+local ActionSerializer = require(script.Parent.Parent.Serialization.ActionSerializer)
 
 local EditorWindow = {}
 
 export type EditorWindowConfig = {
 	Parent: GuiObject,
-	OnSave: ((SkillData: any) -> boolean?)?,
-	OnTest: ((SkillData: any) -> ())?,
-	OnLoad: ((SkillId: string) -> any?)?,
-	GetSkillsList: (() -> { { Id: string, Name: string } })?,
+	OnSave: ((ActionData: any) -> boolean?)?,
+	OnTest: ((ActionData: any) -> ())?,
+	OnLoad: ((ActionId: string) -> any?)?,
+	GetActionsList: (() -> { { Id: string, Name: string } })?,
 }
 
 export type EditorWindowInstance = {
 	Frame: Frame,
-	LoadSkill: (SkillData: any) -> (),
-	NewSkill: () -> (),
-	GetSkillData: () -> any,
-	SetSkillId: (NewSkillId: string) -> (),
-	GetSkillId: () -> string,
+	LoadAction: (ActionData: any) -> (),
+	NewAction: () -> (),
+	GetActionData: () -> any,
+	SetActionId: (NewActionId: string) -> (),
+	GetActionId: () -> string,
 	SetVisible: (Visible: boolean) -> (),
 	Destroy: () -> (),
 }
@@ -57,7 +57,7 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 	local ManagerConnections: { any } = {}
 
 	local Container = Instance.new("Frame")
-	Container.Name = "SkillEditor"
+	Container.Name = "ActionEditor"
 	Container.Size = UDim2.fromScale(1, 1)
 	Container.BackgroundColor3 = Theme.Colors.Background
 	Container.BorderSizePixel = 0
@@ -255,9 +255,9 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		UpdateWirePositions()
 	end
 
-	local function ResetToNewSkill()
+	local function ResetToNewAction()
 		EditorState.Reset()
-		ToolbarPanel.SetSkillName("New Skill")
+		ToolbarPanel.SetActionName("New Action")
 		ToolbarPanel.SetDirty(false)
 		BranchListPanel.SetBranches({})
 		ClearCanvas()
@@ -269,46 +269,46 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 			if EditorState.IsDirty() then
 				Modal.Confirm({
 					Title = "Unsaved Changes",
-					Message = "You have unsaved changes. Are you sure you want to create a new skill?",
+					Message = "You have unsaved changes. Are you sure you want to create a new Action?",
 					ConfirmText = "Discard",
 					ConfirmColor = Theme.Colors.Error,
 					Parent = Container,
 					OnConfirm = function()
-						ResetToNewSkill()
+						ResetToNewAction()
 					end,
 				})
 			else
-				ResetToNewSkill()
+				ResetToNewAction()
 			end
 		end,
 		OnSave = function()
 			if Config.OnSave then
-				local SkillData = SkillSerializer.Export(EditorState.Get())
-				local Success = Config.OnSave(SkillData)
+				local ActionData = ActionSerializer.Export(EditorState.Get())
+				local Success = Config.OnSave(ActionData)
 				if Success ~= false then
 					EditorState.ClearDirty()
-					Notification.Success("Skill saved successfully!", Container)
+					Notification.Success("Action saved successfully!", Container)
 				else
-					Notification.Error("Failed to save skill.", Container)
+					Notification.Error("Failed to save Action.", Container)
 				end
 			end
 		end,
 		OnLoad = function()
 			local function ShowLoadModal()
-				local SkillsList = if Config.GetSkillsList then Config.GetSkillsList() else {}
+				local ActionsList = if Config.GetActionsList then Config.GetActionsList() else {}
 
 				Modal.Select({
-					Title = "Load Skill",
-					Options = SkillsList,
+					Title = "Load Action",
+					Options = ActionsList,
 					Parent = Container,
-					OnSelected = function(SkillId: string)
+					OnSelected = function(ActionId: string)
 						if Config.OnLoad then
-							local LoadedData = Config.OnLoad(SkillId)
+							local LoadedData = Config.OnLoad(ActionId)
 							if LoadedData then
-								EditorInstance.LoadSkill(LoadedData)
-								Notification.Success("Skill loaded!", Container)
+								EditorInstance.LoadAction(LoadedData)
+								Notification.Success("Action loaded!", Container)
 							else
-								Notification.Error("Failed to load skill.", Container)
+								Notification.Error("Failed to load Action.", Container)
 							end
 						end
 					end,
@@ -318,7 +318,7 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 			if EditorState.IsDirty() then
 				Modal.Confirm({
 					Title = "Unsaved Changes",
-					Message = "You have unsaved changes. Are you sure you want to load a different skill?",
+					Message = "You have unsaved changes. Are you sure you want to load a different Action?",
 					ConfirmText = "Discard",
 					ConfirmColor = Theme.Colors.Error,
 					Parent = Container,
@@ -332,8 +332,8 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		end,
 		OnTest = function()
 			if Config.OnTest then
-				local SkillData = SkillSerializer.Export(EditorState.Get())
-				Config.OnTest(SkillData)
+				local ActionData = ActionSerializer.Export(EditorState.Get())
+				Config.OnTest(ActionData)
 			end
 		end,
 		OnNameChanged = function(Name: string)
@@ -585,10 +585,10 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		Frame = Container,
 	} :: any
 
-	function EditorInstance.LoadSkill(SkillData: any)
-		local NewState = SkillSerializer.Import(SkillData)
+	function EditorInstance.LoadAction(ActionData: any)
+		local NewState = ActionSerializer.Import(ActionData)
 		EditorState.Set(NewState)
-		ToolbarPanel.SetSkillName(NewState.DisplayName)
+		ToolbarPanel.SetActionName(NewState.DisplayName)
 		ToolbarPanel.SetDirty(false)
 		BranchListPanel.SetBranches(NewState.Branches)
 
@@ -598,20 +598,20 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		end
 	end
 
-	function EditorInstance.NewSkill()
-		ResetToNewSkill()
+	function EditorInstance.NewAction()
+		ResetToNewAction()
 	end
 
-	function EditorInstance.GetSkillData(): any
-		return SkillSerializer.Export(EditorState.Get())
+	function EditorInstance.GetActionData(): any
+		return ActionSerializer.Export(EditorState.Get())
 	end
 
-	function EditorInstance.SetSkillId(NewSkillId: string)
-		EditorState.SetSkillId(NewSkillId)
+	function EditorInstance.SetActionId(NewActionId: string)
+		EditorState.SetActionId(NewActionId)
 	end
 
-	function EditorInstance.GetSkillId(): string
-		return EditorState.GetSkillId()
+	function EditorInstance.GetActionId(): string
+		return EditorState.GetActionId()
 	end
 
 	function EditorInstance.SetVisible(Visible: boolean)
