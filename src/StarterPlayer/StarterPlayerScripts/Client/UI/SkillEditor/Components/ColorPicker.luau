@@ -108,12 +108,12 @@ function ColorPicker.Create(Config: ColorPickerConfig): ColorPickerInstance
 
 		ColorButton.MouseEnter:Connect(function()
 			ColorStroke.Color = Theme.Colors.Primary
-			ColorStroke.Thickness = 2
+			ColorStroke.Thickness = Theme.StrokeSizes.Selected
 		end)
 
 		ColorButton.MouseLeave:Connect(function()
 			ColorStroke.Color = Theme.Colors.Border
-			ColorStroke.Thickness = 1
+			ColorStroke.Thickness = Theme.StrokeSizes.Deslected
 		end)
 
 		ColorButton.MouseButton1Click:Connect(function()

@@ -179,11 +179,11 @@ function Comment.Create(Config: CommentConfig): CommentInstance
 		if IsSelected then
 			Stroke.Color = Theme.Colors.BorderFocus
 			Stroke.Transparency = 0
-			Stroke.Thickness = 2
+			Stroke.Thickness = Theme.StrokeSizes.Selected
 		else
 			Stroke.Color = Color3.fromRGB(85, 85, 90)
 			Stroke.Transparency = 0.2
-			Stroke.Thickness = 1
+			Stroke.Thickness = Theme.StrokeSizes.Deslected
 		end
 	end
 

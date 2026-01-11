@@ -85,6 +85,11 @@ Theme.Sizes = {
 	SafeAreaTop = 36,
 }
 
+Theme.StrokeSizes = {
+	Selected = 1,
+	Deslected = 1,
+}
+
 Theme.Fonts = {
 	Default = Font.fromEnum(Enum.Font.GothamMedium),
 	Bold = Font.fromEnum(Enum.Font.GothamBold),
@@ -147,7 +152,7 @@ function Theme.ApplyStroke(Target: GuiObject, StrokeColor: Color3?, Thickness: n
 	end
 
 	Stroke.Color = StrokeColor or Theme.Colors.Border
-	Stroke.Thickness = Thickness or 1
+	Stroke.Thickness = Thickness or Theme.StrokeSizes.Selected
 	Stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	return Stroke
 end

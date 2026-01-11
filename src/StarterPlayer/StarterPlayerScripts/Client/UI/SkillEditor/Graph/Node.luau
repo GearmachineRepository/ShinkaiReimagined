@@ -315,11 +315,11 @@ function Node.Create(Config: NodeConfig): NodeInstance
 		IsSelected = Selected
 		if Selected then
 			Stroke.Color = Theme.Colors.BorderFocus
-			Stroke.Thickness = 2
+			Stroke.Thickness = Theme.StrokeSizes.Selected
 			UpdateZIndex(true)
 		else
 			Stroke.Color = Theme.Colors.Border
-			Stroke.Thickness = 1
+			Stroke.Thickness = Theme.StrokeSizes.Deslected
 			UpdateZIndex(false)
 		end
 	end
