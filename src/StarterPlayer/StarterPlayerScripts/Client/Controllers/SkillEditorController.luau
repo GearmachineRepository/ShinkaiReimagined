@@ -148,13 +148,11 @@ function SkillEditorController.Start()
 		end
 	end)
 
-	ControllerTrove:Connect(PlayerSkillController.SkillAdded :: any, function(SkillId: string, SkillData: any)
+	ControllerTrove:Connect(PlayerSkillController.SkillAdded :: any, function(SkillId: string, _SkillData: any)
 		if EditorInstance then
-			local CurrentData = EditorInstance.GetSkillData()
-			if CurrentData and (not CurrentData.SkillId or CurrentData.SkillId == "") then
-				local UpdatedData = table.clone(SkillData)
-				UpdatedData.SkillId = SkillId
-				EditorInstance.LoadSkill(UpdatedData)
+			local CurrentSkillId = EditorInstance.GetSkillId()
+			if not CurrentSkillId or CurrentSkillId == "" then
+				EditorInstance.SetSkillId(SkillId)
 			end
 		end
 	end)

@@ -32,6 +32,8 @@ export type EditorWindowInstance = {
 	LoadSkill: (SkillData: any) -> (),
 	NewSkill: () -> (),
 	GetSkillData: () -> any,
+	SetSkillId: (NewSkillId: string) -> (),
+	GetSkillId: () -> string,
 	SetVisible: (Visible: boolean) -> (),
 	Destroy: () -> (),
 }
@@ -125,38 +127,40 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 			return
 		end
 
-		for WireId, WireInstance in WireInstances do
-			local WireData: Types.WireInstance? = nil
-			for _, WireItem in Branch.Wires do
-				if WireItem.WireId == WireId then
-					WireData = WireItem
-					break
+		task.defer(function()
+			for WireId, WireInstance in WireInstances do
+				local WireData: Types.WireInstance? = nil
+				for _, WireItem in Branch.Wires do
+					if WireItem.WireId == WireId then
+						WireData = WireItem
+						break
+					end
 				end
+
+				if not WireData then
+					continue
+				end
+
+				local FromNode = NodeInstances[WireData.FromNodeId]
+				local ToNode = NodeInstances[WireData.ToNodeId]
+
+				if not FromNode or not ToNode then
+					continue
+				end
+
+				local FromPort = FromNode.GetPort(WireData.FromPortName)
+				local ToPort = ToNode.GetPort(WireData.ToPortName)
+
+				if not FromPort or not ToPort then
+					continue
+				end
+
+				local StartPos = FromPort.GetWorldPosition()
+				local EndPos = ToPort.GetWorldPosition()
+
+				WireInstance.SetPositions(StartPos, EndPos)
 			end
-
-			if not WireData then
-				continue
-			end
-
-			local FromNode = NodeInstances[WireData.FromNodeId]
-			local ToNode = NodeInstances[WireData.ToNodeId]
-
-			if not FromNode or not ToNode then
-				continue
-			end
-
-			local FromPort = FromNode.GetPort(WireData.FromPortName)
-			local ToPort = ToNode.GetPort(WireData.ToPortName)
-
-			if not FromPort or not ToPort then
-				continue
-			end
-
-			local StartPos = FromPort.GetWorldPosition()
-			local EndPos = ToPort.GetWorldPosition()
-
-			WireInstance.SetPositions(StartPos, EndPos)
-		end
+		end)
 	end
 
 	local function UpdatePreviewWire()
@@ -198,6 +202,28 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		ConnectionState.FromPortType = nil
 		ConnectionState.FromDirection = nil
 		ConnectionState.PreviewWire = nil
+	end
+
+	local function DeleteWire(WireId: string)
+		local Branch = GetCurrentBranch()
+		if not Branch then
+			return
+		end
+
+		local WireUI = WireInstances[WireId]
+		if WireUI then
+			WireUI.Destroy()
+			WireInstances[WireId] = nil
+		end
+
+		for Index, WireData in Branch.Wires do
+			if WireData.WireId == WireId then
+				table.remove(Branch.Wires, Index)
+				break
+			end
+		end
+
+		MarkDirty()
 	end
 
 	local function DeleteNode(NodeId: string)
@@ -244,28 +270,6 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		if State.SelectedNodeId == NodeId then
 			State.SelectedNodeId = nil
 			PropertiesPanel.SetNode(nil)
-		end
-
-		MarkDirty()
-	end
-
-	local function DeleteWire(WireId: string)
-		local Branch = GetCurrentBranch()
-		if not Branch then
-			return
-		end
-
-		local WireUI = WireInstances[WireId]
-		if WireUI then
-			WireUI.Destroy()
-			WireInstances[WireId] = nil
-		end
-
-		for Index, WireData in Branch.Wires do
-			if WireData.WireId == WireId then
-				table.remove(Branch.Wires, Index)
-				break
-			end
 		end
 
 		MarkDirty()
@@ -410,7 +414,7 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 			WireInstances[WireData.WireId] = WireUI
 		end
 
-		task.defer(UpdateWirePositions)
+		UpdateWirePositions()
 	end
 
 	local function SelectBranch(BranchId: string)
@@ -711,6 +715,14 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		return EditorWindow.ExportSkillData(State)
 	end
 
+	function EditorInstance.SetSkillId(NewSkillId: string)
+		State.SkillId = NewSkillId
+	end
+
+	function EditorInstance.GetSkillId(): string
+		return State.SkillId
+	end
+
 	function EditorInstance.SetVisible(Visible: boolean)
 		Container.Visible = Visible
 	end
@@ -733,6 +745,40 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 	return EditorInstance
 end
 
+local function SerializeWires(Wires: { Types.WireInstance }): { any }
+	local SerializedWires = {}
+	for _, WireData in Wires do
+		table.insert(SerializedWires, {
+			WireId = WireData.WireId,
+			FromNodeId = WireData.FromNodeId,
+			FromPortName = WireData.FromPortName,
+			ToNodeId = WireData.ToNodeId,
+			ToPortName = WireData.ToPortName,
+			WireType = WireData.WireType,
+		})
+	end
+	return SerializedWires
+end
+
+local function DeserializeWires(SerializedWires: { any }?): { Types.WireInstance }
+	if not SerializedWires then
+		return {}
+	end
+
+	local Wires: { Types.WireInstance } = {}
+	for _, WireData in SerializedWires do
+		table.insert(Wires, {
+			WireId = WireData.WireId or HttpService:GenerateGUID(false),
+			FromNodeId = WireData.FromNodeId,
+			FromPortName = WireData.FromPortName,
+			ToNodeId = WireData.ToNodeId,
+			ToPortName = WireData.ToPortName,
+			WireType = WireData.WireType or "Flow",
+		})
+	end
+	return Wires
+end
+
 function EditorWindow.ImportSkillData(SkillData: any): Types.EditorState
 	local State: Types.EditorState = {
 		SkillId = SkillData.SkillId or "",
@@ -746,45 +792,54 @@ function EditorWindow.ImportSkillData(SkillData: any): Types.EditorState
 		IsDirty = false,
 	}
 
+	local EditorData = SkillData.EditorData or {}
+	local EditorWires = EditorData.Wires or {}
+
 	if SkillData.Timeline then
 		local BranchId = HttpService:GenerateGUID(false)
 		local Nodes: { Types.NodeInstance } = {}
-		local PositionX = 0
+		local FallbackPositionX = 0
 
 		for _, Block in SkillData.Timeline do
-			local NodeData = NodeFactory.BlockToNode(Block, Vector2.new(PositionX, 0))
+			local FallbackPosition = Vector2.new(FallbackPositionX, 0)
+			local NodeData = NodeFactory.BlockToNode(Block, FallbackPosition)
 			table.insert(Nodes, NodeData)
-			PositionX = PositionX + Theme.Sizes.NodeWidth + 40
+			FallbackPositionX = FallbackPositionX + Theme.Sizes.NodeWidth + 40
 		end
+
+		local BranchWires = DeserializeWires(EditorWires["Main"] or EditorWires[1])
 
 		State.Branches[BranchId] = {
 			BranchId = BranchId,
 			BranchName = "Main",
 			IsEntry = true,
 			Nodes = Nodes,
-			Wires = {},
+			Wires = BranchWires,
 			Position = Vector2.zero,
 		}
 	elseif SkillData.Branches then
 		for BranchName, BranchData in SkillData.Branches do
 			local BranchId = HttpService:GenerateGUID(false)
 			local Nodes: { Types.NodeInstance } = {}
-			local PositionX = 0
+			local FallbackPositionX = 0
 
 			if BranchData.Timeline then
 				for _, Block in BranchData.Timeline do
-					local NodeData = NodeFactory.BlockToNode(Block, Vector2.new(PositionX, 0))
+					local FallbackPosition = Vector2.new(FallbackPositionX, 0)
+					local NodeData = NodeFactory.BlockToNode(Block, FallbackPosition)
 					table.insert(Nodes, NodeData)
-					PositionX = PositionX + Theme.Sizes.NodeWidth + 40
+					FallbackPositionX = FallbackPositionX + Theme.Sizes.NodeWidth + 40
 				end
 			end
+
+			local BranchWires = DeserializeWires(EditorWires[BranchName])
 
 			State.Branches[BranchId] = {
 				BranchId = BranchId,
 				BranchName = BranchName,
 				IsEntry = BranchData.Entry == true,
 				Nodes = Nodes,
-				Wires = {},
+				Wires = BranchWires,
 				Position = Vector2.zero,
 			}
 		end
@@ -805,6 +860,8 @@ function EditorWindow.ExportSkillData(State: Types.EditorState): any
 		BranchCount = BranchCount + 1
 	end
 
+	local EditorWires: { [string]: any } = {}
+
 	if BranchCount == 1 then
 		for _, Branch in State.Branches do
 			if Branch.IsEntry then
@@ -814,6 +871,7 @@ function EditorWindow.ExportSkillData(State: Types.EditorState): any
 					table.insert(Timeline, Block)
 				end
 				SkillData.Timeline = Timeline
+				EditorWires["Main"] = SerializeWires(Branch.Wires)
 				break
 			end
 		end
@@ -829,8 +887,13 @@ function EditorWindow.ExportSkillData(State: Types.EditorState): any
 				Entry = Branch.IsEntry,
 				Timeline = Timeline,
 			}
+			EditorWires[Branch.BranchName] = SerializeWires(Branch.Wires)
 		end
 	end
+
+	SkillData.EditorData = {
+		Wires = EditorWires,
+	}
 
 	return SkillData
 end

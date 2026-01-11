@@ -35,6 +35,11 @@ local function ExtractBaseName(SkillId: string): string
     return string.gsub(SkillId, "^Player_%d+_", "")
 end
 
+local function IsPlayerSkillId(SkillId: string, Player: Player): boolean
+    local Pattern = "^Player_" .. Player.UserId .. "_"
+    return string.match(SkillId, Pattern) ~= nil
+end
+
 function PlayerSkillManager.Init()
     ServiceTrove = Trove.new()
 end
@@ -59,6 +64,13 @@ function PlayerSkillManager.Start()
     ServiceTrove:Connect(Packets.PlayerSkillUpdate.OnServerEvent :: any, function(Player: Player, RawSkill: any)
         local Success, Result = PlayerSkillManager.UpdateSkill(Player, RawSkill)
         Packets.PlayerSkillUpdateResult:FireClient(Player, Success, Result or "Unknown")
+
+        if Success then
+            local Skill = PlayerSkillManager.GetSkill(Player, Result or "Unknown")
+            if Skill then
+                Packets.PlayerSkillAdded:FireClient(Player, Result or "Unknown", Skill)
+            end
+        end
     end)
 
     ServiceTrove:Connect(Packets.PlayerSkillDelete.OnServerEvent :: any, function(Player: Player, SkillId: string)
@@ -105,7 +117,8 @@ function PlayerSkillManager.LoadFromData(Player: Player, SavedSkills: { any }?)
     for _, RawSkill in SavedSkills do
         local ValidSkill = SkillValidator.Validate(RawSkill)
         if ValidSkill then
-            local SkillId = MakeSkillId(Player, ValidSkill.SkillId)
+            local BaseName = ValidSkill.DisplayName or ValidSkill.SkillId or "Unnamed"
+            local SkillId = MakeSkillId(Player, BaseName)
             ValidSkill.SkillId = SkillId
             ValidSkill.OwnerUserId = Player.UserId
             PlayerSkills[Player][SkillId] = ValidSkill
@@ -154,7 +167,8 @@ function PlayerSkillManager.CreateSkill(Player: Player, RawSkill: any): (boolean
         return false, "InvalidSkill"
     end
 
-    local SkillId = MakeSkillId(Player, ValidSkill.SkillId)
+    local BaseName = ValidSkill.DisplayName or "Unnamed"
+    local SkillId = MakeSkillId(Player, BaseName)
 
     if Skills[SkillId] then
         return false, "SkillExists"
@@ -181,7 +195,15 @@ function PlayerSkillManager.UpdateSkill(Player: Player, RawSkill: any): (boolean
         return false, "InvalidSkill"
     end
 
-    local SkillId = MakeSkillId(Player, ValidSkill.SkillId)
+    local SkillId = ValidSkill.SkillId
+
+    if not SkillId or SkillId == "" then
+        return false, "NoSkillId"
+    end
+
+    if not IsPlayerSkillId(SkillId, Player) then
+        return false, "InvalidSkillId"
+    end
 
     if not Skills[SkillId] then
         return false, "SkillNotFound"

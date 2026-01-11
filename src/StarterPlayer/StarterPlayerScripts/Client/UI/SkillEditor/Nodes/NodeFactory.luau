@@ -69,6 +69,10 @@ function NodeFactory.NodeToBlock(NodeInstance: Types.NodeInstance): { [string]: 
 	local Block: { [string]: any } = {
 		BlockType = NodeInstance.BlockType,
 		BlockId = NodeInstance.NodeId,
+		EditorPosition = {
+			X = NodeInstance.Position.X,
+			Y = NodeInstance.Position.Y,
+		},
 	}
 
 	for Key, Value in NodeInstance.Properties do
@@ -78,7 +82,7 @@ function NodeFactory.NodeToBlock(NodeInstance: Types.NodeInstance): { [string]: 
 	return Block
 end
 
-function NodeFactory.BlockToNode(Block: { [string]: any }, Position: Vector2?): Types.NodeInstance
+function NodeFactory.BlockToNode(Block: { [string]: any }, FallbackPosition: Vector2?): Types.NodeInstance
 	local BlockType = Block.BlockType :: string
 	local Definition = NodeRegistry.Get(BlockType)
 
@@ -90,10 +94,18 @@ function NodeFactory.BlockToNode(Block: { [string]: any }, Position: Vector2?): 
 		end
 	end
 
+	local Position = FallbackPosition or Vector2.zero
+	if Block.EditorPosition then
+		Position = Vector2.new(
+			Block.EditorPosition.X or 0,
+			Block.EditorPosition.Y or 0
+		)
+	end
+
 	return {
 		NodeId = Block.BlockId or NodeFactory.GenerateNodeId(),
 		BlockType = BlockType,
-		Position = Position or Vector2.zero,
+		Position = Position,
 		Properties = Properties,
 		Block = Block :: any,
 	}

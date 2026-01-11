@@ -21,6 +21,7 @@ export type WireInstance = {
 	WireId: string,
 	WireType: Types.PortType,
 	SetPositions: (StartPosition: Vector2, EndPosition: Vector2) -> (),
+	SetCanvasPositions: (StartPosition: Vector2, EndPosition: Vector2) -> (),
 	SetHighlighted: (Highlighted: boolean) -> (),
 	SetSelected: (Selected: boolean) -> (),
 	Destroy: () -> (),
@@ -119,26 +120,12 @@ function Wire.Create(Config: WireConfig): WireInstance
 		return 1
 	end
 
-	local function UpdateWire()
-		local Zoom = GetZoomScale()
-
-		local Parent = Container.Parent :: GuiObject?
-		if not Parent then
-			return
-		end
-
-		local ParentAbsPos = Parent.AbsolutePosition
-
-		local AdjustedStart = (StartPosition - ParentAbsPos) / Zoom
-		local AdjustedEnd = (EndPosition - ParentAbsPos) / Zoom
-
-		local ControlOffset = math.abs(AdjustedEnd.X - AdjustedStart.X) * 0.5
+	local function RenderBezier(P0: Vector2, P3: Vector2)
+		local ControlOffset = math.abs(P3.X - P0.X) * 0.5
 		ControlOffset = math.max(ControlOffset, WIRE_CURVATURE)
 
-		local P0 = AdjustedStart
-		local P1 = AdjustedStart + Vector2.new(ControlOffset, 0)
-		local P2 = AdjustedEnd - Vector2.new(ControlOffset, 0)
-		local P3 = AdjustedEnd
+		local P1 = P0 + Vector2.new(ControlOffset, 0)
+		local P2 = P3 - Vector2.new(ControlOffset, 0)
 
 		for Index, Segment in Segments do
 			local T0 = (Index - 1) / BEZIER_SEGMENTS
@@ -157,6 +144,22 @@ function Wire.Create(Config: WireConfig): WireInstance
 		end
 	end
 
+	local function UpdateWire()
+		local Zoom = GetZoomScale()
+
+		local Parent = Container.Parent :: GuiObject?
+		if not Parent then
+			return
+		end
+
+		local ParentAbsPos = Parent.AbsolutePosition
+
+		local AdjustedStart = (StartPosition - ParentAbsPos) / Zoom
+		local AdjustedEnd = (EndPosition - ParentAbsPos) / Zoom
+
+		RenderBezier(AdjustedStart, AdjustedEnd)
+	end
+
 	UpdateWire()
 
 	local Instance: WireInstance = {
@@ -169,6 +172,10 @@ function Wire.Create(Config: WireConfig): WireInstance
 		StartPosition = NewStartPosition
 		EndPosition = NewEndPosition
 		UpdateWire()
+	end
+
+	function Instance.SetCanvasPositions(CanvasStart: Vector2, CanvasEnd: Vector2)
+		RenderBezier(CanvasStart, CanvasEnd)
 	end
 
 	function Instance.SetHighlighted(Highlighted: boolean)

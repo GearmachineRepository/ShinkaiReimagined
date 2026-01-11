@@ -24,6 +24,9 @@ local function ValidateString(Value: any, MaxLength: number): string?
     if type(Value) ~= "string" then
         return nil
     end
+    if #Value == 0 then
+        return nil
+    end
     if #Value > MaxLength then
         return string.sub(Value, 1, MaxLength)
     end
@@ -44,6 +47,19 @@ local function ValidateBoolean(Value: any, Default: boolean): boolean
     return Default
 end
 
+local function ValidateEditorPosition(Value: any): { X: number, Y: number }?
+    if type(Value) ~= "table" then
+        return nil
+    end
+    if type(Value.X) ~= "number" or type(Value.Y) ~= "number" then
+        return nil
+    end
+    return {
+        X = Value.X,
+        Y = Value.Y,
+    }
+end
+
 local function ValidateBlock(Block: any): any?
     if type(Block) ~= "table" then
         return nil
@@ -59,6 +75,8 @@ local function ValidateBlock(Block: any): any?
     }
 
     Clean.BlockId = ValidateString(Block.BlockId, MAX_SIGNAL_LENGTH)
+
+    Clean.EditorPosition = ValidateEditorPosition(Block.EditorPosition)
 
     if Block.RequireSignal then
         if type(Block.RequireSignal) == "string" then
@@ -223,19 +241,81 @@ local function ValidateBranch(Branch: any): any?
     }
 end
 
+local function ValidateWire(Wire: any): any?
+    if type(Wire) ~= "table" then
+        return nil
+    end
+
+    local WireId = ValidateString(Wire.WireId, 64)
+    local FromNodeId = ValidateString(Wire.FromNodeId, 64)
+    local FromPortName = ValidateString(Wire.FromPortName, 32)
+    local ToNodeId = ValidateString(Wire.ToNodeId, 64)
+    local ToPortName = ValidateString(Wire.ToPortName, 32)
+    local WireType = ValidateString(Wire.WireType, 16)
+
+    if not FromNodeId or not FromPortName or not ToNodeId or not ToPortName then
+        return nil
+    end
+
+    return {
+        WireId = WireId,
+        FromNodeId = FromNodeId,
+        FromPortName = FromPortName,
+        ToNodeId = ToNodeId,
+        ToPortName = ToPortName,
+        WireType = WireType or "Flow",
+    }
+end
+
+local function ValidateEditorData(EditorData: any): any?
+    if type(EditorData) ~= "table" then
+        return nil
+    end
+
+    local Clean: { [string]: any } = {}
+
+    if type(EditorData.Wires) == "table" then
+        Clean.Wires = {}
+        for BranchName, BranchWires in EditorData.Wires do
+            local ValidBranchName = ValidateString(BranchName, 32)
+            if ValidBranchName and type(BranchWires) == "table" then
+                local ValidWires = {}
+                for _, Wire in BranchWires do
+                    local ValidWire = ValidateWire(Wire)
+                    if ValidWire then
+                        table.insert(ValidWires, ValidWire)
+                    end
+                end
+                if #ValidWires > 0 then
+                    Clean.Wires[ValidBranchName] = ValidWires
+                end
+            end
+        end
+    end
+
+    return Clean
+end
+
 function SkillValidator.Validate(RawSkill: any): any?
     if type(RawSkill) ~= "table" then
         return nil
     end
 
-    local SkillId = ValidateString(RawSkill.SkillId, 32)
-    if not SkillId then
+    local SkillId = RawSkill.SkillId
+    if type(SkillId) ~= "string" then
+        SkillId = ""
+    elseif #SkillId > 64 then
+        SkillId = string.sub(SkillId, 1, 64)
+    end
+
+    local DisplayName = ValidateString(RawSkill.DisplayName, 48)
+    if not DisplayName then
         return nil
     end
 
     local Clean: { [string]: any } = {
         SkillId = SkillId,
-        DisplayName = ValidateString(RawSkill.DisplayName, 48) or SkillId,
+        DisplayName = DisplayName,
         IsPlayerMade = true,
     }
 
@@ -298,6 +378,8 @@ function SkillValidator.Validate(RawSkill: any): any?
         DamageMultiplier = 1,
         KnockbackMultiplier = 1,
     }
+
+    Clean.EditorData = ValidateEditorData(RawSkill.EditorData)
 
     return Clean
 end
