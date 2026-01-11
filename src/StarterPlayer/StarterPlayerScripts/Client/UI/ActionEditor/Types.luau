@@ -50,7 +50,7 @@ export type BranchData = {
 }
 
 export type EditorState = {
-	SkillId: string,
+	ActionId: string,
 	DisplayName: string,
 	Branches: { [string]: BranchData },
 	SelectedNodeId: string?,

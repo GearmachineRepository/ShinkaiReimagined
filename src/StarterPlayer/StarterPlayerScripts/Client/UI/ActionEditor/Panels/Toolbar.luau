@@ -12,6 +12,8 @@ export type ToolbarConfig = {
 	OnLoad: (() -> ())?,
 	OnTest: (() -> ())?,
 	OnNew: (() -> ())?,
+	OnTemplates: (() -> ())?,
+	OnExportJson: (() -> ())?,
 	OnNameChanged: ((Name: string) -> ())?,
 }
 
@@ -34,7 +36,7 @@ function Toolbar.Create(Config: ToolbarConfig): ToolbarInstance
 
 	local LeftSection = Instance.new("Frame")
 	LeftSection.Name = "Left"
-	LeftSection.Size = UDim2.fromScale(0.5, 1)
+	LeftSection.Size = UDim2.fromScale(0.4, 1)
 	LeftSection.BackgroundTransparency = 1
 	LeftSection.Parent = Container
 
@@ -50,8 +52,8 @@ function Toolbar.Create(Config: ToolbarConfig): ToolbarInstance
 
 	local RightSection = Instance.new("Frame")
 	RightSection.Name = "Right"
-	RightSection.Size = UDim2.fromScale(0.5, 1)
-	RightSection.Position = UDim2.fromScale(0.5, 0)
+	RightSection.Size = UDim2.fromScale(0.6, 1)
+	RightSection.Position = UDim2.fromScale(0.4, 0)
 	RightSection.BackgroundTransparency = 1
 	RightSection.Parent = Container
 
@@ -94,7 +96,7 @@ function Toolbar.Create(Config: ToolbarConfig): ToolbarInstance
 	local NewButton = Button.Create({
 		Name = "New",
 		Text = "New",
-		Size = UDim2.fromOffset(70, 28),
+		Size = UDim2.fromOffset(60, 28),
 		BackgroundColor = Theme.Colors.Surface,
 		Parent = RightSection,
 		OnClick = Config.OnNew,
@@ -104,32 +106,52 @@ function Toolbar.Create(Config: ToolbarConfig): ToolbarInstance
 	local LoadButton = Button.Create({
 		Name = "Load",
 		Text = "Load",
-		Size = UDim2.fromOffset(70, 28),
+		Size = UDim2.fromOffset(60, 28),
 		BackgroundColor = Theme.Colors.Surface,
 		Parent = RightSection,
 		OnClick = Config.OnLoad,
 	})
-	LoadButton.Frame.LayoutOrder = 2
+	LoadButton.Frame.LayoutOrder = 3
 
 	local SaveButton = Button.Create({
 		Name = "Save",
 		Text = "Save",
-		Size = UDim2.fromOffset(70, 28),
+		Size = UDim2.fromOffset(60, 28),
 		BackgroundColor = Theme.Colors.Primary,
 		Parent = RightSection,
 		OnClick = Config.OnSave,
 	})
-	SaveButton.Frame.LayoutOrder = 3
+	SaveButton.Frame.LayoutOrder = 4
+
+	local ExportButton = Button.Create({
+		Name = "Export",
+		Text = "Export JSON",
+		Size = UDim2.fromOffset(90, 28),
+		BackgroundColor = Theme.Colors.Surface,
+		Parent = RightSection,
+		OnClick = Config.OnExportJson,
+	})
+	ExportButton.Frame.LayoutOrder = 5
 
 	local TestButton = Button.Create({
 		Name = "Test",
 		Text = "Test",
-		Size = UDim2.fromOffset(70, 28),
+		Size = UDim2.fromOffset(60, 28),
 		BackgroundColor = Theme.Colors.Success,
 		Parent = RightSection,
 		OnClick = Config.OnTest,
 	})
-	TestButton.Frame.LayoutOrder = 4
+	TestButton.Frame.LayoutOrder = 6
+
+	local TemplatesButton = Button.Create({
+		Name = "Templates",
+		Text = "Templates",
+		Size = UDim2.fromOffset(80, 28),
+		BackgroundColor = Theme.Colors.Surface,
+		Parent = RightSection,
+		OnClick = Config.OnTemplates,
+	})
+	TemplatesButton.Frame.LayoutOrder = 7
 
 	if Config.Parent then
 		Container.Parent = Config.Parent
@@ -154,8 +176,10 @@ function Toolbar.Create(Config: ToolbarConfig): ToolbarInstance
 	function ToolbarObj.Destroy()
 		NameInput.Destroy()
 		NewButton.Destroy()
+		TemplatesButton.Destroy()
 		LoadButton.Destroy()
 		SaveButton.Destroy()
+		ExportButton.Destroy()
 		TestButton.Destroy()
 		Container:Destroy()
 	end

@@ -1,10 +1,10 @@
 return {
-    ToolId = "DivergentFist",
-    DisplayName = "Divergent Fist",
+    ToolId = "DashAttack",
+    DisplayName = "Dash Attack",
     Icon = "rbxassetid://123456",
     Slot = 1,
     Cooldown = 4,
-    ActionId = "DivergentFist",
+    ActionId = "DashAttack",
     GroundOnly = true,
     RequiresTarget = false,
 }

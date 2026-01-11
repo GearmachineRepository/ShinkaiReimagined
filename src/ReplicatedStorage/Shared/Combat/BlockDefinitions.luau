@@ -35,27 +35,40 @@ export type BlockDefinition = {
 }
 
 local COLORS = {
-	Flow = Color3.fromRGB(100, 140, 180),
-	Combat = Color3.fromRGB(200, 80, 80),
-	Effects = Color3.fromRGB(140, 100, 180),
-	Logic = Color3.fromRGB(180, 160, 80),
-	Advanced = Color3.fromRGB(80, 160, 140),
+	Flow = Color3.fromRGB(83, 108, 133),
+	Combat = Color3.fromRGB(167, 83, 83),
+	Effects = Color3.fromRGB(116, 91, 141),
+	Logic = Color3.fromRGB(160, 146, 91),
+	Advanced = Color3.fromRGB(78, 138, 123),
 	Utility = Color3.fromRGB(90, 90, 95),
+	Condition = Color3.fromRGB(89, 134, 89),
 }
 
 local DEFINITIONS: { [string]: BlockDefinition } = {
+	BranchStart = {
+		BlockType = "BranchStart",
+		Category = "Flow",
+		DisplayName = "Branch Start",
+		Description = "Entry point for this branch. Execution begins here.",
+		Color = COLORS.Flow,
+		Ports = {
+			{ Name = "Out", Direction = "Output", PortType = "Flow" },
+		},
+		Properties = {},
+	},
+
 	Wait = {
 		BlockType = "Wait",
 		Category = "Flow",
 		DisplayName = "Wait",
-		Description = "Pauses execution for a specified duration before continuing.",
+		Description = "Pauses execution for a specified duration.",
 		Color = COLORS.Flow,
 		Ports = {
 			{ Name = "In", Direction = "Input", PortType = "Flow" },
 			{ Name = "Out", Direction = "Output", PortType = "Flow" },
 		},
 		Properties = {
-			{ Key = "Time", Label = "Duration", Type = "Number", Default = 0.1, Min = 0, Max = 10, Tooltip = "Time in seconds to wait." },
+			{ Key = "Time", Label = "Duration", Type = "Number", Default = 0.1, Min = 0, Max = 10, Tooltip = "Time in seconds." },
 		},
 	},
 
@@ -69,7 +82,40 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 			{ Name = "In", Direction = "Input", PortType = "Flow" },
 		},
 		Properties = {
-			{ Key = "Target", Label = "Target Branch", Type = "BranchDropdown", Default = "", Tooltip = "The branch to jump to." },
+			{ Key = "BranchName", Label = "Target Branch", Type = "BranchDropdown", Default = "", Tooltip = "Branch to jump to." },
+		},
+	},
+
+	Gate = {
+		BlockType = "Gate",
+		Category = "Flow",
+		DisplayName = "Gate",
+		Description = "Blocks flow until the required signal is active.",
+		Color = COLORS.Flow,
+		Ports = {
+			{ Name = "In", Direction = "Input", PortType = "Flow" },
+			{ Name = "Out", Direction = "Output", PortType = "Flow" },
+			{ Name = "Signal", Direction = "Input", PortType = "Signal" },
+		},
+		Properties = {
+			{ Key = "Timeout", Label = "Timeout", Type = "Number", Default = 0, Min = 0, Max = 10, Tooltip = "Max wait time. 0 = no timeout." },
+		},
+	},
+
+	Condition = {
+		BlockType = "Condition",
+		Category = "Flow",
+		DisplayName = "Condition",
+		Description = "Branches based on a runtime condition check.",
+		Color = COLORS.Condition,
+		Ports = {
+			{ Name = "In", Direction = "Input", PortType = "Flow" },
+			{ Name = "True", Direction = "Output", PortType = "Flow" },
+			{ Name = "False", Direction = "Output", PortType = "Flow" },
+		},
+		Properties = {
+			{ Key = "Check", Label = "Check", Type = "Dropdown", Default = "IsGrounded", Options = { "IsGrounded", "IsAirborne", "HasTarget", "IsBlocking", "IsStunned", "HealthAbove", "HealthBelow", "TargetInRange" }, Tooltip = "Condition to check." },
+			{ Key = "Value", Label = "Value", Type = "Number", Default = 50, Min = 0, Max = 100, Tooltip = "Threshold value for Health/Range checks." },
 		},
 	},
 
@@ -92,8 +138,8 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 			{ Key = "SizeX", Label = "Size X", Type = "Number", Default = 6, Min = 1, Max = 20, Tooltip = "Width." },
 			{ Key = "SizeY", Label = "Size Y", Type = "Number", Default = 6, Min = 1, Max = 20, Tooltip = "Height." },
 			{ Key = "SizeZ", Label = "Size Z", Type = "Number", Default = 6, Min = 1, Max = 20, Tooltip = "Depth." },
-			{ Key = "Damage", Label = "Damage", Type = "Number", Default = 10, Min = 0, Max = 50, Tooltip = "Damage dealt." },
-			{ Key = "Stun", Label = "Stun", Type = "Number", Default = 0.2, Min = 0, Max = 3, Tooltip = "Stun duration." },
+			{ Key = "Damage", Label = "Damage", Type = "Number", Default = 10, Min = 0, Max = 100, Tooltip = "Damage dealt." },
+			{ Key = "Stun", Label = "Stun", Type = "Number", Default = 0.2, Min = 0, Max = 5, Tooltip = "Stun duration." },
 			{ Key = "Blockable", Label = "Blockable", Type = "Boolean", Default = true, Tooltip = "Can be blocked." },
 		},
 	},
@@ -102,16 +148,15 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 		BlockType = "HitCancel",
 		Category = "Combat",
 		DisplayName = "Hit Cancel",
-		Description = "Branches based on whether a hit occurred within a time window.",
+		Description = "Waits for a time window, then branches based on hit/miss.",
 		Color = COLORS.Combat,
 		Ports = {
 			{ Name = "In", Direction = "Input", PortType = "Flow" },
-			{ Name = "Out", Direction = "Output", PortType = "Flow" },
+			{ Name = "OnHit", Direction = "Output", PortType = "Flow" },
+			{ Name = "OnMiss", Direction = "Output", PortType = "Flow" },
 		},
 		Properties = {
 			{ Key = "Time", Label = "Window", Type = "Number", Default = 0.3, Min = 0, Max = 2, Tooltip = "Time window to check for hits." },
-			{ Key = "Flip", Label = "On Miss", Type = "Boolean", Default = false, Tooltip = "Trigger on miss instead of hit." },
-			{ Key = "Branch", Label = "Branch", Type = "BranchDropdown", Default = "", Tooltip = "Branch to jump to." },
 			{ Key = "Endlag", Label = "Endlag", Type = "Number", Default = 0, Min = 0, Max = 1, Tooltip = "Delay before branching." },
 		},
 	},
@@ -120,14 +165,14 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 		BlockType = "AddHealth",
 		Category = "Combat",
 		DisplayName = "Add Health",
-		Description = "Adds or removes health. Use negative values for damage.",
+		Description = "Adds or removes health from self. Negative values deal damage.",
 		Color = COLORS.Combat,
 		Ports = {
 			{ Name = "In", Direction = "Input", PortType = "Flow" },
 			{ Name = "Out", Direction = "Output", PortType = "Flow" },
 		},
 		Properties = {
-			{ Key = "Amount", Label = "Amount", Type = "Number", Default = 5, Min = -50, Max = 50, Tooltip = "Health to add." },
+			{ Key = "Amount", Label = "Amount", Type = "Number", Default = 5, Min = -100, Max = 100, Tooltip = "Health to add." },
 		},
 	},
 
@@ -135,7 +180,7 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 		BlockType = "Animation",
 		Category = "Effects",
 		DisplayName = "Animation",
-		Description = "Plays an animation on the character.",
+		Description = "Plays an animation. Blocks until complete if not looping.",
 		Color = COLORS.Effects,
 		Ports = {
 			{ Name = "In", Direction = "Input", PortType = "Flow" },
@@ -145,7 +190,7 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 		Properties = {
 			{ Key = "AnimationId", Label = "Animation ID", Type = "AssetId", Default = "", Tooltip = "Roblox animation asset ID." },
 			{ Key = "Speed", Label = "Speed", Type = "Number", Default = 1, Min = 0.1, Max = 5, Tooltip = "Playback speed." },
-			{ Key = "Loop", Label = "Loop", Type = "Boolean", Default = false, Tooltip = "Repeat until stopped." },
+			{ Key = "Loop", Label = "Loop", Type = "Boolean", Default = false, Tooltip = "Loop until action ends." },
 		},
 	},
 
@@ -189,17 +234,17 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 	Signal = {
 		BlockType = "Signal",
 		Category = "Logic",
-		DisplayName = "Signal",
-		Description = "Emits or clears a signal for logic gates.",
+		DisplayName = "Emit Signal",
+		Description = "Emits a custom signal that other nodes can listen for.",
 		Color = COLORS.Logic,
 		Ports = {
 			{ Name = "In", Direction = "Input", PortType = "Flow" },
 			{ Name = "Out", Direction = "Output", PortType = "Flow" },
+			{ Name = "Signal", Direction = "Output", PortType = "Signal" },
 		},
 		Properties = {
-			{ Key = "SignalId", Label = "Signal ID", Type = "String", Default = "", Tooltip = "Unique signal identifier." },
-			{ Key = "Duration", Label = "Duration", Type = "Number", Default = 0, Min = 0, Max = 10, Tooltip = "How long signal stays active." },
-			{ Key = "Clear", Label = "Clear", Type = "Boolean", Default = false, Tooltip = "Clear instead of emit." },
+			{ Key = "SignalId", Label = "Signal Name", Type = "String", Default = "", Tooltip = "Custom signal identifier." },
+			{ Key = "Duration", Label = "Duration", Type = "Number", Default = 0, Min = 0, Max = 10, Tooltip = "How long signal stays active. 0 = forever." },
 		},
 	},
 
@@ -207,18 +252,18 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 		BlockType = "AndGate",
 		Category = "Logic",
 		DisplayName = "AND Gate",
-		Description = "Outputs when threshold number of input signals are active.",
+		Description = "Passes flow when threshold signals are active.",
 		Color = COLORS.Logic,
 		Ports = {
 			{ Name = "In", Direction = "Input", PortType = "Flow" },
 			{ Name = "Out", Direction = "Output", PortType = "Flow" },
+			{ Name = "Signal1", Direction = "Input", PortType = "Signal" },
+			{ Name = "Signal2", Direction = "Input", PortType = "Signal" },
+			{ Name = "Signal3", Direction = "Input", PortType = "Signal" },
 			{ Name = "OnPass", Direction = "Output", PortType = "Signal" },
 		},
 		Properties = {
-			{ Key = "Inputs", Label = "Input Signals", Type = "String", Default = "", Tooltip = "Comma-separated signal IDs." },
-			{ Key = "Threshold", Label = "Threshold", Type = "Number", Default = 2, Min = 1, Max = 8, Tooltip = "Signals needed to pass." },
-			{ Key = "Output", Label = "Output Signal", Type = "String", Default = "", Tooltip = "Signal to emit on pass." },
-			{ Key = "Duration", Label = "Duration", Type = "Number", Default = 0, Min = 0, Max = 10, Tooltip = "Output signal duration." },
+			{ Key = "Threshold", Label = "Threshold", Type = "Number", Default = 2, Min = 1, Max = 3, Tooltip = "Signals needed to pass." },
 		},
 	},
 
@@ -226,54 +271,48 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 		BlockType = "OrGate",
 		Category = "Logic",
 		DisplayName = "OR Gate",
-		Description = "Outputs when any input signal is active.",
+		Description = "Passes flow when any input signal is active.",
 		Color = COLORS.Logic,
 		Ports = {
 			{ Name = "In", Direction = "Input", PortType = "Flow" },
 			{ Name = "Out", Direction = "Output", PortType = "Flow" },
+			{ Name = "Signal1", Direction = "Input", PortType = "Signal" },
+			{ Name = "Signal2", Direction = "Input", PortType = "Signal" },
+			{ Name = "Signal3", Direction = "Input", PortType = "Signal" },
 			{ Name = "OnPass", Direction = "Output", PortType = "Signal" },
 		},
-		Properties = {
-			{ Key = "Inputs", Label = "Input Signals", Type = "String", Default = "", Tooltip = "Comma-separated signal IDs." },
-			{ Key = "Output", Label = "Output Signal", Type = "String", Default = "", Tooltip = "Signal to emit on pass." },
-			{ Key = "Duration", Label = "Duration", Type = "Number", Default = 0, Min = 0, Max = 10, Tooltip = "Output signal duration." },
-		},
+		Properties = {},
 	},
 
 	NotGate = {
 		BlockType = "NotGate",
 		Category = "Logic",
 		DisplayName = "NOT Gate",
-		Description = "Outputs when input signal is NOT active.",
+		Description = "Passes flow when input signal is NOT active.",
 		Color = COLORS.Logic,
 		Ports = {
 			{ Name = "In", Direction = "Input", PortType = "Flow" },
 			{ Name = "Out", Direction = "Output", PortType = "Flow" },
+			{ Name = "Signal", Direction = "Input", PortType = "Signal" },
 			{ Name = "OnPass", Direction = "Output", PortType = "Signal" },
 		},
-		Properties = {
-			{ Key = "Input", Label = "Input Signal", Type = "String", Default = "", Tooltip = "Signal to invert." },
-			{ Key = "Output", Label = "Output Signal", Type = "String", Default = "", Tooltip = "Signal to emit." },
-			{ Key = "Duration", Label = "Duration", Type = "Number", Default = 0, Min = 0, Max = 10, Tooltip = "Output signal duration." },
-		},
+		Properties = {},
 	},
 
 	Timer = {
 		BlockType = "Timer",
 		Category = "Logic",
 		DisplayName = "Timer",
-		Description = "Emits output signal after a delay when triggered.",
+		Description = "Starts a timer when triggered. Emits signal after delay.",
 		Color = COLORS.Logic,
 		Ports = {
 			{ Name = "In", Direction = "Input", PortType = "Flow" },
 			{ Name = "Out", Direction = "Output", PortType = "Flow" },
+			{ Name = "Trigger", Direction = "Input", PortType = "Signal" },
 			{ Name = "OnExpired", Direction = "Output", PortType = "Signal" },
 		},
 		Properties = {
-			{ Key = "Input", Label = "Trigger Signal", Type = "String", Default = "", Tooltip = "Signal that starts timer." },
-			{ Key = "Time", Label = "Delay", Type = "Number", Default = 1, Min = 0.1, Max = 10, Tooltip = "Seconds before output." },
-			{ Key = "Output", Label = "Output Signal", Type = "String", Default = "", Tooltip = "Signal to emit." },
-			{ Key = "OutputDuration", Label = "Output Duration", Type = "Number", Default = 0, Min = 0, Max = 10, Tooltip = "Output signal duration." },
+			{ Key = "Time", Label = "Delay", Type = "Number", Default = 1, Min = 0.1, Max = 10, Tooltip = "Seconds before signal fires." },
 		},
 	},
 
@@ -281,27 +320,25 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 		BlockType = "Counter",
 		Category = "Logic",
 		DisplayName = "Counter",
-		Description = "Counts signal occurrences and outputs at threshold.",
+		Description = "Counts signal occurrences. Emits when threshold reached.",
 		Color = COLORS.Logic,
 		Ports = {
 			{ Name = "In", Direction = "Input", PortType = "Flow" },
 			{ Name = "Out", Direction = "Output", PortType = "Flow" },
+			{ Name = "Count", Direction = "Input", PortType = "Signal" },
 			{ Name = "OnThreshold", Direction = "Output", PortType = "Signal" },
 		},
 		Properties = {
-			{ Key = "Input", Label = "Count Signal", Type = "String", Default = "", Tooltip = "Signal to count." },
 			{ Key = "Threshold", Label = "Threshold", Type = "Number", Default = 3, Min = 1, Max = 100, Tooltip = "Count to trigger." },
-			{ Key = "Output", Label = "Output Signal", Type = "String", Default = "", Tooltip = "Signal to emit." },
-			{ Key = "Duration", Label = "Duration", Type = "Number", Default = 0, Min = 0, Max = 10, Tooltip = "Output signal duration." },
-			{ Key = "ResetOnThreshold", Label = "Reset On Trigger", Type = "Boolean", Default = true, Tooltip = "Reset counter after triggering." },
+			{ Key = "ResetOnThreshold", Label = "Reset", Type = "Boolean", Default = true, Tooltip = "Reset counter after triggering." },
 		},
 	},
 
-	Action = {
-		BlockType = "Action",
+	SubAction = {
+		BlockType = "SubAction",
 		Category = "Advanced",
-		DisplayName = "Action",
-		Description = "Executes another action definition as a sub-action.",
+		DisplayName = "Sub-Action",
+		Description = "Executes another action. Blocks until complete.",
 		Color = COLORS.Advanced,
 		Ports = {
 			{ Name = "In", Direction = "Input", PortType = "Flow" },
@@ -311,30 +348,29 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 		Properties = {
 			{ Key = "ActionId", Label = "Action ID", Type = "String", Default = "", Tooltip = "ID of action to execute." },
 			{ Key = "Speed", Label = "Speed", Type = "Number", Default = 1, Min = 0.1, Max = 3, Tooltip = "Speed multiplier." },
-			{ Key = "CancelLast", Label = "Cancel Last", Type = "Boolean", Default = false, Tooltip = "Cancel previous action." },
 		},
 	},
 
-	BranchStart = {
-		BlockType = "BranchStart",
-		Category = "Flow",
-		DisplayName = "Branch Start",
-		Description = "Entry point for this branch. Connect this to the first node in your timeline.",
-		Color = COLORS.Flow,
-		Ports = {
-			{ Name = "Out", Direction = "Output", PortType = "Flow" },
+	Comment = {
+		BlockType = "Comment",
+		Category = "Utility",
+		DisplayName = "Comment",
+		Description = "A visual note for documentation. Does not execute.",
+		Color = COLORS.Utility,
+		Ports = {},
+		Properties = {
+			{ Key = "Text", Label = "Text", Type = "String", Default = "Note", Tooltip = "Comment text." },
 		},
-		Properties = {},
 	},
 }
 
 local CATEGORIES = {
-    { Name = "Utility", Types = { "Comment" } },
-    { Name = "Flow", Types = { "BranchStart", "Wait", "Branch" } },
-    { Name = "Combat", Types = { "Hitbox", "HitCancel", "AddHealth" } },
-    { Name = "Effects", Types = { "Animation", "Sound", "Velocity" } },
-    { Name = "Logic", Types = { "Signal", "AndGate", "OrGate", "NotGate", "Timer", "Counter" } },
-    { Name = "Advanced", Types = { "Action" } },
+	{ Name = "Flow", Types = { "BranchStart", "Wait", "Branch", "Gate", "Condition" } },
+	{ Name = "Combat", Types = { "Hitbox", "HitCancel", "AddHealth" } },
+	{ Name = "Effects", Types = { "Animation", "Sound", "Velocity" } },
+	{ Name = "Logic", Types = { "Signal", "AndGate", "OrGate", "NotGate", "Timer", "Counter" } },
+	{ Name = "Advanced", Types = { "SubAction" } },
+	{ Name = "Utility", Types = { "Comment" } },
 }
 
 function BlockDefinitions.Get(BlockType: string): BlockDefinition?
@@ -388,17 +424,48 @@ function BlockDefinitions.GetOutputPorts(BlockType: string): { PortDefinition }
 	return OutputPorts
 end
 
-function BlockDefinitions.GetSignalOutputs(BlockType: string): { string }
-	local OutputPorts = BlockDefinitions.GetOutputPorts(BlockType)
-	local SignalOutputs: { string } = {}
-
-	for _, Port in OutputPorts do
-		if Port.PortType == "Signal" then
-			table.insert(SignalOutputs, Port.Name)
+function BlockDefinitions.GetFlowInputs(BlockType: string): { PortDefinition }
+	local InputPorts = BlockDefinitions.GetInputPorts(BlockType)
+	local FlowPorts: { PortDefinition } = {}
+	for _, Port in InputPorts do
+		if Port.PortType == "Flow" then
+			table.insert(FlowPorts, Port)
 		end
 	end
+	return FlowPorts
+end
 
-	return SignalOutputs
+function BlockDefinitions.GetFlowOutputs(BlockType: string): { PortDefinition }
+	local OutputPorts = BlockDefinitions.GetOutputPorts(BlockType)
+	local FlowPorts: { PortDefinition } = {}
+	for _, Port in OutputPorts do
+		if Port.PortType == "Flow" then
+			table.insert(FlowPorts, Port)
+		end
+	end
+	return FlowPorts
+end
+
+function BlockDefinitions.GetSignalInputs(BlockType: string): { PortDefinition }
+	local InputPorts = BlockDefinitions.GetInputPorts(BlockType)
+	local SignalPorts: { PortDefinition } = {}
+	for _, Port in InputPorts do
+		if Port.PortType == "Signal" then
+			table.insert(SignalPorts, Port)
+		end
+	end
+	return SignalPorts
+end
+
+function BlockDefinitions.GetSignalOutputs(BlockType: string): { PortDefinition }
+	local OutputPorts = BlockDefinitions.GetOutputPorts(BlockType)
+	local SignalPorts: { PortDefinition } = {}
+	for _, Port in OutputPorts do
+		if Port.PortType == "Signal" then
+			table.insert(SignalPorts, Port)
+		end
+	end
+	return SignalPorts
 end
 
 function BlockDefinitions.GetDefaultProperties(BlockType: string): { [string]: any }

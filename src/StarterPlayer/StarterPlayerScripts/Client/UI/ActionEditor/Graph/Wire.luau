@@ -15,8 +15,11 @@ local DISTANCE_NEAR = 0
 local DISTANCE_FAR = 500
 
 local CURVATURE_SEGMENT_BONUS = 0.7
-
 local WIRE_CURVATURE = 80
+
+local FADE_MAX_TRANSPARENCY = 0.85
+local FADE_OPAQUE_FRACTION = 0.25
+local FADE_GAMMA = 1.8
 
 export type WireConfig = {
 	WireId: string,
@@ -72,6 +75,7 @@ function Wire.Create(Config: WireConfig): WireInstance
 	local StartPosition = Vector2.zero
 	local EndPosition = Vector2.new(100, 0)
 	local IsHighlighted = false
+	local FadeEnabled = Config.WireId == "Preview"
 
 	local Container = Instance.new("Frame")
 	Container.Name = "Wire_" .. Config.WireId
@@ -84,6 +88,40 @@ function Wire.Create(Config: WireConfig): WireInstance
 	local Segments: { Frame } = {}
 	local ClickDetectors: { TextButton } = {}
 	local ActiveSegmentCount = 0
+
+	local function ComputeFadeTransparency(SegmentIndex: number, SegmentCount: number): number
+		if not FadeEnabled then
+			return 0
+		end
+
+		if SegmentCount <= 1 then
+			return 0
+		end
+
+		local Normalized = math.clamp(SegmentIndex / SegmentCount, 0, 1)
+
+		if Normalized <= FADE_OPAQUE_FRACTION then
+			return 0
+		end
+
+		local FadeAlpha = (Normalized - FADE_OPAQUE_FRACTION) / (1 - FADE_OPAQUE_FRACTION)
+		FadeAlpha = math.clamp(FadeAlpha, 0, 1)
+
+		local ShapedAlpha = FadeAlpha ^ FADE_GAMMA
+		return Lerp(0, FADE_MAX_TRANSPARENCY, ShapedAlpha)
+	end
+
+	local function ApplyFade(SegmentCount: number)
+		for SegmentIndex = 1, SegmentCount do
+			local Segment = Segments[SegmentIndex]
+			Segment.BackgroundTransparency = ComputeFadeTransparency(SegmentIndex, SegmentCount)
+		end
+
+		for SegmentIndex = SegmentCount + 1, #Segments do
+			local Segment = Segments[SegmentIndex]
+			Segment.BackgroundTransparency = 0
+		end
+	end
 
 	local function CreateSegment(Index: number): (Frame, TextButton)
 		local Segment = Instance.new("Frame")
@@ -215,6 +253,8 @@ function Wire.Create(Config: WireConfig): WireInstance
 			Segment.Position = UDim2.fromOffset(Point0.X, Point0.Y)
 			Segment.Rotation = math.deg(Angle)
 		end
+
+		ApplyFade(SegmentCount)
 	end
 
 	local function UpdateWire()

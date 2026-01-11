@@ -5,8 +5,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Enums = require(Shared.Enums)
 local ActionTypes = require(Shared.Types.ActionTypes)
-local Handlers = require(script.Parent.Handlers)
 local ExecutionContextModule = require(script.Parent.ExecutionContext)
+local GraphExecutor = require(script.Parent.GraphExecutor)
+local TimelineConverter = require(script.Parent.TimelineConverter)
 
 type ExecutionEntity = ActionTypes.ExecutionEntity
 type ActionDefinition = ActionTypes.ActionDefinition
@@ -25,20 +26,24 @@ function ActionExecutor.CreateContext(
 	return ExecutionContextModule.Create(Entity, ActionDefinition, EventBus)
 end
 
-function ActionExecutor.Run(ExecutionContext: ExecutionContext)
-	local Entity = ExecutionContext.Entity
-	local ActionDefinition = ExecutionContext.ActionDefinition
-	local EventBus = ExecutionContext.EventBus
+function ActionExecutor.Run(Context: ExecutionContext)
+	local Entity = Context.Entity
+	local ActionDefinition = Context.ActionDefinition
+	local EventBus = Context.EventBus
 
 	EventBus:Publish(Enums.Combat.Action.Activated, {
 		Entity = Entity,
 		ActionId = ActionDefinition.ActionId,
 	})
 
-	local EntryBranch = ActionExecutor.GetEntryBranch(ActionDefinition)
-	ActionExecutor.RunBranch(EntryBranch, ExecutionContext)
+	local GraphDef = TimelineConverter.EnsureGraphFormat(ActionDefinition)
+	local EntryBranch = GraphExecutor.GetEntryBranch(GraphDef)
 
-	if ExecutionContext.Canceled then
+	if EntryBranch then
+		GraphExecutor.ExecuteBranch(EntryBranch, Context)
+	end
+
+	if Context.Canceled then
 		EventBus:Publish(Enums.Combat.Action.Canceled, {
 			Entity = Entity,
 			ActionId = ActionDefinition.ActionId,
@@ -56,123 +61,31 @@ function ActionExecutor.Execute(
 	ActionDefinition: ActionDefinition,
 	EventBus: any
 ): ExecutionContext
-	local ExecutionContext = ActionExecutor.CreateContext(Entity, ActionDefinition, EventBus)
-	ActionExecutor.Run(ExecutionContext)
-	return ExecutionContext
+	local Context = ActionExecutor.CreateContext(Entity, ActionDefinition, EventBus)
+	ActionExecutor.Run(Context)
+	return Context
 end
 
-function ActionExecutor.GetEntryBranch(ActionDefinition: ActionDefinition): Branch
-	if ActionDefinition.Timeline then
-		return { Timeline = ActionDefinition.Timeline }
-	end
+function ActionExecutor.ExecuteBranch(
+	Context: ExecutionContext,
+	BranchName: string
+)
+	local GraphDef = TimelineConverter.EnsureGraphFormat(Context.ActionDefinition)
+	local Branch = GraphExecutor.GetBranch(GraphDef, BranchName)
 
-	if ActionDefinition.Branches then
-		for _, BranchData in ActionDefinition.Branches do
-			if BranchData.Entry then
-				return BranchData
-			end
-		end
-
-		local MainBranch = ActionDefinition.Branches["Main"]
-		if MainBranch then
-			return MainBranch
-		end
-	end
-
-	return { Timeline = {} }
-end
-
-function ActionExecutor.CheckSignalRequirement(Block: Block, Context: ExecutionContext): boolean
-	local RequireSignal = Block.RequireSignal
-	if not RequireSignal then
-		return true
-	end
-
-	local RequireAll = Block.RequireAll ~= false
-
-	if type(RequireSignal) == "string" then
-		return Context.IsSignalActive(RequireSignal)
-	end
-
-	if type(RequireSignal) == "table" then
-		local SignalList = RequireSignal :: { string }
-
-		if RequireAll then
-			for _, SignalId in SignalList do
-				if not Context.IsSignalActive(SignalId) then
-					return false
-				end
-			end
-			return true
-		else
-			for _, SignalId in SignalList do
-				if Context.IsSignalActive(SignalId) then
-					return true
-				end
-			end
-			return false
-		end
-	end
-
-	return true
-end
-
-function ActionExecutor.RunBranch(BranchData: Branch, ExecutionContext: ExecutionContext)
-	local Timeline = BranchData.Timeline
-	if not Timeline then
-		return
-	end
-
-	for _Index, Block in Timeline do
-		if ExecutionContext.Canceled then
-			break
-		end
-
-		if not ActionExecutor.CheckSignalRequirement(Block, ExecutionContext) then
-			continue
-		end
-
-		local Handler = Handlers.Get(Block.BlockType)
-		if not Handler then
-			continue
-		end
-
-		local Success, Result = pcall(function()
-			return Handler.Execute(Block, ExecutionContext)
-		end)
-
-		if not Success then
-			continue
-		end
-
-		local HandlerResult = Result :: HandlerResult?
-
-		if HandlerResult then
-			if HandlerResult.JumpToBranch then
-				local Branches = ExecutionContext.ActionDefinition.Branches
-				local TargetBranch = Branches and Branches[HandlerResult.JumpToBranch]
-				if TargetBranch then
-					ExecutionContext.EventBus:Publish(Enums.Combat.Action.BranchChanged, {
-						Entity = ExecutionContext.Entity,
-						ActionId = ExecutionContext.ActionDefinition.ActionId,
-						Branch = HandlerResult.JumpToBranch,
-					})
-					ActionExecutor.RunBranch(TargetBranch, ExecutionContext)
-				end
-				return
-			end
-
-			if HandlerResult.Cancel then
-				ExecutionContext.Cancel()
-				return
-			end
-		end
+	if Branch then
+		Context.EventBus:Publish(Enums.Combat.Action.BranchChanged, {
+			Entity = Context.Entity,
+			ActionId = Context.ActionDefinition.ActionId,
+			Branch = BranchName,
+		})
+		GraphExecutor.ExecuteBranch(Branch, Context)
 	end
 end
 
-function ActionExecutor.Cancel(ExecutionContext: ExecutionContext)
-	if ExecutionContext and not ExecutionContext.Canceled then
-		ExecutionContext.Cancel()
+function ActionExecutor.Cancel(Context: ExecutionContext)
+	if Context and not Context.Canceled then
+		Context.Cancel()
 	end
 end
 

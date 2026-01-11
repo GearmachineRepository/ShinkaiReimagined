@@ -1,12 +1,12 @@
 --!strict
 
 return {
-	ToolId = "ThreeHitCombo",
-	DisplayName = "Three Hit Combo",
+	ToolId = "SignalCombo",
+	DisplayName = "Signal Combo",
 	Icon = "",
 	Slot = 3,
 	Cooldown = 2,
-	ActionId = "ThreeHitCombo",
+	ActionId = "SignalCombo",
 	GroundOnly = false,
 	RequiresTarget = false,
 }

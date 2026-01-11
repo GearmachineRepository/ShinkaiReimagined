@@ -1,10 +1,10 @@
 return {
-	ToolId = "TestPunch",
-	DisplayName = "Test Punch",
+	ToolId = "CounterRage",
+	DisplayName = "Counter Rage",
 	Icon = "",
 	Slot = 2,
 	Cooldown = 0.5,
-	ActionId = "TestPunch",
+	ActionId = "CounterRage",
 	GroundOnly = false,
 	RequiresTarget = false,
 }

@@ -76,11 +76,19 @@ export type HitCancelBlock = Block & {
 	Branch: string?,
 }
 
-export type ActionBlock = Block & {
+export type SubActionBlock = Block & {
 	ActionId: string,
 	Speed: number?,
-	CancelLast: boolean?,
-	HoldFor: number?,
+}
+
+export type GateBlock = Block & {
+	SignalId: string?,
+	Timeout: number?,
+}
+
+export type ConditionBlock = Block & {
+	Check: string,
+	Value: number?,
 }
 
 export type SignalBlock = Block & {
@@ -205,6 +213,7 @@ export type ExecutionContext = {
 export type HandlerResult = {
 	JumpToBranch: string?,
 	Cancel: boolean?,
+	FlowPort: string?,
 }
 
 export type BlockHandler = {

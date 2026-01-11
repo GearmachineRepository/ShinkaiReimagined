@@ -26,6 +26,10 @@ local function Configure()
 		local BlockType = string.gsub(Module.Name, "Handler", "")
 		LoadedHandlers[BlockType] = Handler :: BlockHandler
 	end
+
+	if LoadedHandlers["SubAction"] then
+		LoadedHandlers["Action"] = LoadedHandlers["SubAction"]
+	end
 end
 
 function Handlers.Get(BlockType: string): BlockHandler?

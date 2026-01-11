@@ -12,33 +12,36 @@ type HandlerResult = ActionTypes.HandlerResult
 local HitCancelHandler = {}
 
 function HitCancelHandler.Execute(Block: Block, Context: ExecutionContext): HandlerResult?
-	local TimeWindow = Block.Time or 1
-	local Flip = Block.Flip or false
+	local TimeWindow = Block.Time or 0.3
 	local Endlag = Block.Endlag or 0
-	local BranchName = Block.Branch
+	local Branch = Block.Branch
+	local Flip = Block.Flip or false
 
-	local HadHit = Context.HadHitInWindow(TimeWindow)
+	local StartTime = tick()
 
-	local ShouldActivate: boolean
-	if Flip then
-		ShouldActivate = not HadHit
-	else
-		ShouldActivate = HadHit
-	end
-
-	if ShouldActivate then
-		if Endlag > 0 then
-			task.wait(Endlag)
-		end
-
-		if BranchName then
-			return { JumpToBranch = BranchName }
-		else
+	while tick() - StartTime < TimeWindow do
+		if Context.Canceled then
 			return { Cancel = true }
 		end
+		task.wait()
 	end
 
-	return nil
+	local HadHit = Context.HadHitInWindow(TimeWindow + 0.1)
+
+	local ShouldTrigger = if Flip then not HadHit else HadHit
+
+	if Endlag > 0 then
+		task.wait(Endlag)
+	end
+
+	if ShouldTrigger then
+		if Branch and Branch ~= "" then
+			return { JumpToBranch = Branch }
+		end
+		return { FlowPort = "OnHit" }
+	else
+		return { FlowPort = "OnMiss" }
+	end
 end
 
 return HitCancelHandler
