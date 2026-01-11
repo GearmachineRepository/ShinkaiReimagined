@@ -14,6 +14,7 @@ export type PortConfig = {
 	OnConnectionStart: ((PortInstance: PortInstance) -> ())?,
 	OnConnectionEnd: ((PortInstance: PortInstance) -> ())?,
 	OnHover: ((Hovered: boolean) -> ())?,
+	IsDraggingWire: (() -> boolean)?,
 }
 
 export type PortInstance = {
@@ -29,7 +30,7 @@ export type PortInstance = {
 }
 
 function Port.Create(Config: PortConfig): PortInstance
-	local PortColor = if Config.PortType == "Flow" then Theme.Colors.PortFlow else Theme.Colors.PortSignal
+	local PortColor = Theme.GetPortColor(Config.PortType)
 	local _IsConnected = false
 	local _IsHighlighted = false
 
@@ -46,14 +47,6 @@ function Port.Create(Config: PortConfig): PortInstance
 	PortCircle.BackgroundColor3 = PortColor
 	PortCircle.BorderSizePixel = 0
 	PortCircle.ZIndex = Theme.ZIndex.Port
-
-	if Config.Direction == "Input" then
-		PortCircle.Position = UDim2.new(0, 4, 0.5, 0)
-		PortCircle.AnchorPoint = Vector2.new(0, 0.5)
-	else
-		PortCircle.Position = UDim2.new(1, -4, 0.5, 0)
-		PortCircle.AnchorPoint = Vector2.new(1, 0.5)
-	end
 	PortCircle.Parent = Container
 
 	Theme.ApplyCorner(PortCircle, UDim.new(0.5, 0))
@@ -68,21 +61,19 @@ function Port.Create(Config: PortConfig): PortInstance
 	PortLabel.TextSize = Theme.TextSizes.Small
 	PortLabel.ZIndex = Theme.ZIndex.Port
 
-	local HalvedPortRadius = Theme.Sizes.NodePortRadius/2
+	local HalvedPortRadius = Theme.Sizes.NodePortRadius / 2
 
 	if Config.Direction == "Input" then
 		PortLabel.Position = UDim2.fromOffset(8, 0)
 		PortLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+		PortCircle.Position = UDim2.new(0, -HalvedPortRadius, 0.5, 0)
+		PortCircle.AnchorPoint = Vector2.new(0.5, 0.5)
 	else
 		PortLabel.Position = UDim2.fromOffset(-8, 0)
 		PortLabel.Size = UDim2.new(1, -8, 1, 0)
 		PortLabel.TextXAlignment = Enum.TextXAlignment.Right
-	end
 
-	if Config.Direction == "Input" then
-		PortCircle.Position = UDim2.new(0, -HalvedPortRadius, 0.5, 0)
-		PortCircle.AnchorPoint = Vector2.new(0.5, 0.5)
-	else
 		PortCircle.Position = UDim2.new(1, HalvedPortRadius, 0.5, 0)
 		PortCircle.AnchorPoint = Vector2.new(0.5, 0.5)
 	end

@@ -29,6 +29,15 @@ Theme.Colors = {
 	Warning = Color3.fromRGB(220, 180, 80),
 	Error = Color3.fromRGB(200, 80, 80),
 
+	NodeFlow = Color3.fromRGB(83, 108, 133),
+	NodeCombat = Color3.fromRGB(167, 83, 83),
+	NodeEffects = Color3.fromRGB(116, 91, 141),
+	NodeLogic = Color3.fromRGB(160, 146, 91),
+	NodeAdvanced = Color3.fromRGB(78, 138, 123),
+	NodeUtility = Color3.fromRGB(90, 90, 95),
+	NodeValue = Color3.fromRGB(80, 180, 140),
+	NodeBoolean = Color3.fromRGB(180, 100, 100),
+
 	NodeWait = Color3.fromRGB(120, 120, 140),
 	NodeAnimation = Color3.fromRGB(180, 120, 200),
 	NodeSound = Color3.fromRGB(200, 160, 80),
@@ -43,9 +52,11 @@ Theme.Colors = {
 
 	PortFlow = Color3.fromRGB(200, 200, 200),
 	PortSignal = Color3.fromRGB(200, 200, 80),
+	PortValue = Color3.fromRGB(80, 200, 160),
 
 	WireFlow = Color3.fromRGB(180, 180, 180),
 	WireSignal = Color3.fromRGB(200, 200, 80),
+	WireValue = Color3.fromRGB(80, 200, 160),
 	WirePreview = Color3.fromRGB(100, 140, 200),
 
 	BranchHeader = Color3.fromRGB(50, 50, 60),
@@ -94,6 +105,7 @@ Theme.Fonts = {
 	Default = Font.fromEnum(Enum.Font.GothamMedium),
 	Bold = Font.fromEnum(Enum.Font.GothamBold),
 	Mono = Font.fromEnum(Enum.Font.RobotoMono),
+	Regular = Font.fromEnum(Enum.Font.GothamMedium),
 }
 
 Theme.TextSizes = {
@@ -125,18 +137,16 @@ Theme.Assets = {
 	GridImage = "rbxassetid://12796647774",
 }
 
-function Theme.ApplyCorner(Target: GuiObject, Radius: UDim?): UICorner
-	local ExistingCorner: Instance? = Target:FindFirstChildOfClass("UICorner")
-	local Corner: UICorner
-
-	if ExistingCorner and ExistingCorner:IsA("UICorner") then
-		Corner = ExistingCorner
+function Theme.ApplyCorner(Target: GuiObject, Radius: UDim | number | nil)
+	local Corner = Instance.new("UICorner")
+	if type(Radius) == "number" then
+		Corner.CornerRadius = UDim.new(0, Radius)
+	elseif typeof(Radius) == "UDim" then
+		Corner.CornerRadius = Radius
 	else
-		Corner = Instance.new("UICorner")
-		Corner.Parent = Target
+		Corner.CornerRadius = Theme.Sizes.BorderRadius
 	end
-
-	Corner.CornerRadius = Radius or Theme.Sizes.BorderRadius
+	Corner.Parent = Target
 	return Corner
 end
 
@@ -157,40 +167,46 @@ function Theme.ApplyStroke(Target: GuiObject, StrokeColor: Color3?, Thickness: n
 	return Stroke
 end
 
-function Theme.ApplyPadding(Target: GuiObject, PaddingValue: UDim?): UIPadding
-	local ExistingPadding: Instance? = Target:FindFirstChildOfClass("UIPadding")
-	local Padding: UIPadding
-
-	if ExistingPadding and ExistingPadding:IsA("UIPadding") then
-		Padding = ExistingPadding
-	else
-		Padding = Instance.new("UIPadding")
-		Padding.Parent = Target
-	end
-
-	local Value: UDim = PaddingValue or Theme.Sizes.Padding
-	Padding.PaddingTop = Value
-	Padding.PaddingBottom = Value
-	Padding.PaddingLeft = Value
-	Padding.PaddingRight = Value
-	return Padding
+function Theme.ApplyListLayout(Target: GuiObject, Direction: Enum.FillDirection?, Padding: UDim?)
+	local Layout = Instance.new("UIListLayout")
+	Layout.FillDirection = Direction or Enum.FillDirection.Vertical
+	Layout.Padding = Padding or Theme.Sizes.Gap
+	Layout.SortOrder = Enum.SortOrder.LayoutOrder
+	Layout.Parent = Target
+	return Layout
 end
 
-function Theme.ApplyListLayout(Target: GuiObject, Direction: Enum.FillDirection?, Gap: UDim?): UIListLayout
-	local ExistingLayout: Instance? = Target:FindFirstChildOfClass("UIListLayout")
-	local Layout: UIListLayout
+function Theme.ApplyPadding(Target: GuiObject, Padding: UDim?)
+	local PaddingObj = Instance.new("UIPadding")
+	local PaddingValue = Padding or Theme.Sizes.Padding
+	PaddingObj.PaddingTop = PaddingValue
+	PaddingObj.PaddingBottom = PaddingValue
+	PaddingObj.PaddingLeft = PaddingValue
+	PaddingObj.PaddingRight = PaddingValue
+	PaddingObj.Parent = Target
+	return PaddingObj
+end
 
-	if ExistingLayout and ExistingLayout:IsA("UIListLayout") then
-		Layout = ExistingLayout
-	else
-		Layout = Instance.new("UIListLayout")
-		Layout.Parent = Target
+function Theme.GetPortColor(PortType: string): Color3
+	if PortType == "Flow" then
+		return Theme.Colors.PortFlow
+	elseif PortType == "Signal" then
+		return Theme.Colors.PortSignal
+	elseif PortType == "Value" then
+		return Theme.Colors.PortValue
 	end
+	return Theme.Colors.PortFlow
+end
 
-	Layout.FillDirection = Direction or Enum.FillDirection.Vertical
-	Layout.Padding = Gap or Theme.Sizes.Gap
-	Layout.SortOrder = Enum.SortOrder.LayoutOrder
-	return Layout
+function Theme.GetWireColor(WireType: string): Color3
+	if WireType == "Flow" then
+		return Theme.Colors.WireFlow
+	elseif WireType == "Signal" then
+		return Theme.Colors.WireSignal
+	elseif WireType == "Value" then
+		return Theme.Colors.WireValue
+	end
+	return Theme.Colors.WireFlow
 end
 
 return Theme

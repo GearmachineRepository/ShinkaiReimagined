@@ -71,7 +71,7 @@ local function ComputeSegmentCount(Distance: number, CurvatureFactor: number): n
 end
 
 function Wire.Create(Config: WireConfig): WireInstance
-	local WireColor = if Config.WireType == "Flow" then Theme.Colors.WireFlow else Theme.Colors.WireSignal
+	local WireColor = Theme.GetWireColor(Config.WireType)
 	local StartPosition = Vector2.zero
 	local EndPosition = Vector2.new(100, 0)
 	local IsHighlighted = false
@@ -334,6 +334,12 @@ function Wire.CreatePreview(Parent: GuiObject, WireType: Types.PortType): WireIn
 		if Segment:IsA("Frame") then
 			Segment.BackgroundColor3 = Theme.Colors.WirePreview
 			Segment.ZIndex = Theme.ZIndex.WirePreview
+
+			for _, Child in Segment:GetChildren() do
+				if Child:IsA("TextButton") then
+					Child.Visible = false
+				end
+			end
 		end
 	end
 
