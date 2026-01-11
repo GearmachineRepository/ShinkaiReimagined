@@ -21,6 +21,10 @@ local FADE_MAX_TRANSPARENCY = 0.85
 local FADE_OPAQUE_FRACTION = 0.25
 local FADE_GAMMA = 1.8
 
+local GRADIENT_START_COLOR = Color3.new(1, 1, 1)
+local GRADIENT_WHITE_FRACTION = 0.18 -- how long it stays white near the start
+local GRADIENT_GAMMA = 0.5 -- ow “snappy” the transition is (higher = stays whiter longer, then ramps faster)
+
 export type WireConfig = {
 	WireId: string,
 	WireType: Types.PortType,
@@ -64,6 +68,7 @@ local function ComputeSegmentCount(Distance: number, CurvatureFactor: number): n
 	local PixelsPerSegment = Lerp(PIXELS_PER_SEGMENT_NEAR, PIXELS_PER_SEGMENT_FAR, DistanceAlpha)
 
 	local BaseSegments = math.floor((Distance / PixelsPerSegment) + 0.5)
+
 	local CurvatureMultiplier = 1 + (CurvatureFactor * CURVATURE_SEGMENT_BONUS)
 	local ScaledSegments = math.floor((BaseSegments * CurvatureMultiplier) + 0.5)
 
@@ -71,11 +76,13 @@ local function ComputeSegmentCount(Distance: number, CurvatureFactor: number): n
 end
 
 function Wire.Create(Config: WireConfig): WireInstance
+	local IsPreviewWire = Config.WireId == "Preview"
 	local WireColor = Theme.GetWireColor(Config.WireType)
 	local StartPosition = Vector2.zero
 	local EndPosition = Vector2.new(100, 0)
 	local IsHighlighted = false
-	local FadeEnabled = Config.WireId == "Preview"
+	local FadeEnabled = IsPreviewWire
+	local IsSelected = false
 
 	local Container = Instance.new("Frame")
 	Container.Name = "Wire_" .. Config.WireId
@@ -88,6 +95,28 @@ function Wire.Create(Config: WireConfig): WireInstance
 	local Segments: { Frame } = {}
 	local ClickDetectors: { TextButton } = {}
 	local ActiveSegmentCount = 0
+
+	local function ComputeGradientColor(SegmentIndex: number, SegmentCount: number): Color3
+		if not IsPreviewWire then
+			return WireColor
+		end
+
+		if SegmentCount <= 1 then
+			return WireColor
+		end
+
+		local Normalized = math.clamp((SegmentIndex - 1) / (SegmentCount - 1), 0, 1)
+
+		if Normalized <= GRADIENT_WHITE_FRACTION then
+			return GRADIENT_START_COLOR
+		end
+
+		local BlendAlpha = (Normalized - GRADIENT_WHITE_FRACTION) / (1 - GRADIENT_WHITE_FRACTION)
+		BlendAlpha = math.clamp(BlendAlpha, 0, 1)
+
+		local ShapedAlpha = BlendAlpha ^ GRADIENT_GAMMA
+		return GRADIENT_START_COLOR:Lerp(WireColor, ShapedAlpha)
+	end
 
 	local function ComputeFadeTransparency(SegmentIndex: number, SegmentCount: number): number
 		if not FadeEnabled then
@@ -112,18 +141,29 @@ function Wire.Create(Config: WireConfig): WireInstance
 	end
 
 	local function ApplyFade(SegmentCount: number)
+		local ShouldApplyGradient = IsPreviewWire and (not IsHighlighted) and (not IsSelected)
+
 		for SegmentIndex = 1, SegmentCount do
 			local Segment = Segments[SegmentIndex]
 			Segment.BackgroundTransparency = ComputeFadeTransparency(SegmentIndex, SegmentCount)
+
+			if ShouldApplyGradient then
+				Segment.BackgroundColor3 = ComputeGradientColor(SegmentIndex, SegmentCount)
+			else
+				Segment.BackgroundColor3 = WireColor
+			end
 		end
 
 		for SegmentIndex = SegmentCount + 1, #Segments do
 			local Segment = Segments[SegmentIndex]
 			Segment.BackgroundTransparency = 0
+			if ShouldApplyGradient then
+				Segment.BackgroundColor3 = WireColor
+			end
 		end
 	end
 
-	local function CreateSegment(Index: number): (Frame, TextButton)
+	local function CreateSegment(Index: number): (Frame, TextButton?)
 		local Segment = Instance.new("Frame")
 		Segment.Name = "Segment_" .. Index
 		Segment.BackgroundColor3 = WireColor
@@ -134,6 +174,10 @@ function Wire.Create(Config: WireConfig): WireInstance
 		Segment.Parent = Container
 
 		Theme.ApplyCorner(Segment, UDim.new(0.5, 0))
+
+		if IsPreviewWire then
+			return Segment, nil
+		end
 
 		local ClickDetector = Instance.new("TextButton")
 		ClickDetector.Name = "Click_" .. Index
@@ -184,7 +228,9 @@ function Wire.Create(Config: WireConfig): WireInstance
 			for Index = CurrentCount + 1, RequiredCount do
 				local Segment, ClickDetector = CreateSegment(Index)
 				table.insert(Segments, Segment)
-				table.insert(ClickDetectors, ClickDetector)
+				if ClickDetector then
+					table.insert(ClickDetectors, ClickDetector)
+				end
 			end
 		end
 
@@ -301,14 +347,19 @@ function Wire.Create(Config: WireConfig): WireInstance
 			Segment.Size = UDim2.fromOffset(Segment.Size.X.Offset, NewThickness)
 			Segment.BackgroundColor3 = NewColor
 		end
+
+		ApplyFade(ActiveSegmentCount)
 	end
 
 	function Instance.SetSelected(Selected: boolean)
+		IsSelected = Selected
 		local NewColor = if Selected then Theme.Colors.Primary else WireColor
 
 		for Index = 1, ActiveSegmentCount do
 			Segments[Index].BackgroundColor3 = NewColor
 		end
+
+		ApplyFade(ActiveSegmentCount)
 	end
 
 	function Instance.Destroy()
@@ -324,28 +375,11 @@ function Wire.Create(Config: WireConfig): WireInstance
 end
 
 function Wire.CreatePreview(Parent: GuiObject, WireType: Types.PortType): WireInstance
-	local PreviewWire = Wire.Create({
+	return Wire.Create({
 		WireId = "Preview",
 		WireType = WireType,
 		Parent = Parent,
 	})
-
-	for _, Segment in PreviewWire.Frame:GetChildren() do
-		if Segment:IsA("Frame") then
-			Segment.BackgroundColor3 = Theme.Colors.WirePreview
-			Segment.ZIndex = Theme.ZIndex.WirePreview
-
-			for _, Child in Segment:GetChildren() do
-				if Child:IsA("TextButton") then
-					Child.Visible = false
-				end
-			end
-		end
-	end
-
-	PreviewWire.Frame.ZIndex = Theme.ZIndex.WirePreview
-
-	return PreviewWire
 end
 
 return Wire
