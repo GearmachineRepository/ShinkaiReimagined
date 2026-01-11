@@ -315,55 +315,91 @@ local function ValidateComment(CommentData: any): any?
     }
 end
 
+local function ValidateBranchStart(BranchStartData: any): any?
+	if type(BranchStartData) ~= "table" then
+		return nil
+	end
+
+	local NodeId = ValidateString(BranchStartData.NodeId, MAX_ID_LENGTH)
+	if not NodeId then
+		return nil
+	end
+
+	local Position = { X = 100, Y = 100 }
+	if type(BranchStartData.Position) == "table" then
+		Position.X = ValidateNumber(BranchStartData.Position.X, -10000, 10000, 100) or 100
+		Position.Y = ValidateNumber(BranchStartData.Position.Y, -10000, 10000, 100) or 100
+	end
+
+	return {
+		NodeId = NodeId,
+		Position = Position,
+	}
+end
+
 local function ValidateEditorData(EditorData: any): any?
-    if type(EditorData) ~= "table" then
-        return nil
-    end
+	if type(EditorData) ~= "table" then
+		return nil
+	end
 
-    local Clean: { [string]: any } = {}
+	local Clean: { [string]: any } = {}
 
-    if type(EditorData.Wires) == "table" then
-        Clean.Wires = {}
-        for BranchName, BranchWires in EditorData.Wires do
-            local ValidBranchName = ValidateString(BranchName, 32)
-            if ValidBranchName and type(BranchWires) == "table" then
-                local ValidWires = {}
-                for _, Wire in BranchWires do
-                    local ValidWire = ValidateWire(Wire)
-                    if ValidWire then
-                        table.insert(ValidWires, ValidWire)
-                    end
-                end
-                if #ValidWires > 0 then
-                    Clean.Wires[ValidBranchName] = ValidWires
-                end
-            end
-        end
-    end
+	if type(EditorData.Wires) == "table" then
+		Clean.Wires = {}
+		for BranchName, BranchWires in EditorData.Wires do
+			local ValidBranchName = ValidateString(BranchName, 32)
+			if ValidBranchName and type(BranchWires) == "table" then
+				local ValidWires = {}
+				for _, Wire in BranchWires do
+					local ValidWire = ValidateWire(Wire)
+					if ValidWire then
+						table.insert(ValidWires, ValidWire)
+					end
+				end
+				if #ValidWires > 0 then
+					Clean.Wires[ValidBranchName] = ValidWires
+				end
+			end
+		end
+	end
 
-    if type(EditorData.Comments) == "table" then
-        Clean.Comments = {}
-        for BranchName, BranchComments in EditorData.Comments do
-            local ValidBranchName = ValidateString(BranchName, 32)
-            if ValidBranchName and type(BranchComments) == "table" then
-                local ValidComments = {}
-                for _, CommentData in BranchComments do
-                    if #ValidComments >= MAX_COMMENTS then
-                        break
-                    end
-                    local ValidComment = ValidateComment(CommentData)
-                    if ValidComment then
-                        table.insert(ValidComments, ValidComment)
-                    end
-                end
-                if #ValidComments > 0 then
-                    Clean.Comments[ValidBranchName] = ValidComments
-                end
-            end
-        end
-    end
+	if type(EditorData.Comments) == "table" then
+		Clean.Comments = {}
+		for BranchName, BranchComments in EditorData.Comments do
+			local ValidBranchName = ValidateString(BranchName, 32)
+			if ValidBranchName and type(BranchComments) == "table" then
+				local ValidComments = {}
+				for _, CommentData in BranchComments do
+					if #ValidComments >= MAX_COMMENTS then
+						break
+					end
+					local ValidComment = ValidateComment(CommentData)
+					if ValidComment then
+						table.insert(ValidComments, ValidComment)
+					end
+				end
+				if #ValidComments > 0 then
+					Clean.Comments[ValidBranchName] = ValidComments
+				end
+			end
+		end
+	end
 
-    return Clean
+	-- ADD THIS BLOCK for BranchStarts
+	if type(EditorData.BranchStarts) == "table" then
+		Clean.BranchStarts = {}
+		for BranchName, BranchStartData in EditorData.BranchStarts do
+			local ValidBranchName = ValidateString(BranchName, 32)
+			if ValidBranchName then
+				local ValidBranchStart = ValidateBranchStart(BranchStartData)
+				if ValidBranchStart then
+					Clean.BranchStarts[ValidBranchName] = ValidBranchStart
+				end
+			end
+		end
+	end
+
+	return Clean
 end
 
 function SkillValidator.Validate(RawSkill: any): any?
