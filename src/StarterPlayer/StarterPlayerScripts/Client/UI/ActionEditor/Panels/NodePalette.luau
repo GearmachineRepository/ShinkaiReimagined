@@ -17,15 +17,6 @@ export type NodePaletteInstance = {
 	Destroy: () -> (),
 }
 
-local CATEGORIES = {
-	{ Name = "Utility", Types = { "Comment" } },
-	{ Name = "Flow", Types = { "Wait", "Branch" } },
-	{ Name = "Combat", Types = { "Hitbox", "HitCancel", "AddHealth" } },
-	{ Name = "Effects", Types = { "Animation", "Sound", "Velocity" } },
-	{ Name = "Logic", Types = { "Signal", "AndGate", "OrGate", "NotGate", "Timer", "Counter" } },
-	{ Name = "Advanced", Types = { "Action" } },
-}
-
 local COMMENT_DEFINITION = {
 	BlockType = "Comment",
 	DisplayName = "Comment",
@@ -81,7 +72,9 @@ function NodePalette.Create(Config: NodePaletteConfig): NodePaletteInstance
 	local TooltipCleanups: { () -> () } = {}
 	local CategoryOrder = 0
 
-	for _, Category in CATEGORIES do
+	local Categories = NodeRegistry.GetCategories()
+
+	for _, Category in Categories do
 		CategoryOrder = CategoryOrder + 1
 
 		local CategoryFrame = Instance.new("Frame")
@@ -112,6 +105,10 @@ function NodePalette.Create(Config: NodePaletteConfig): NodePaletteInstance
 		CategoryLabel.Parent = CategoryFrame
 
 		for TypeIndex, BlockType in Category.Types do
+			if BlockType == "BranchStart" then
+				continue
+			end
+
 			local Definition = nil
 			if BlockType == "Comment" then
 				Definition = COMMENT_DEFINITION
@@ -138,27 +135,30 @@ function NodePalette.Create(Config: NodePaletteConfig): NodePaletteInstance
 
 			local ColorBar = Instance.new("Frame")
 			ColorBar.Name = "ColorBar"
-			ColorBar.Size = UDim2.new(0, 4, 1, -4)
+			ColorBar.Size = UDim2.new(0, 3, 1, -4)
 			ColorBar.Position = UDim2.fromOffset(2, 2)
 			ColorBar.BackgroundColor3 = Definition.Color
 			ColorBar.BorderSizePixel = 0
-			ColorBar.ZIndex = Theme.ZIndex.Panel
+			ColorBar.ZIndex = Theme.ZIndex.Panel + 1
 			ColorBar.Parent = NodeButton
 
-			Theme.ApplyCorner(ColorBar, UDim.new(0, 2))
+			Theme.ApplyCorner(ColorBar)
 
-			local ButtonLabel = Instance.new("TextLabel")
-			ButtonLabel.Name = "Label"
-			ButtonLabel.Size = UDim2.new(1, -16, 1, 0)
-			ButtonLabel.Position = UDim2.fromOffset(12, 0)
-			ButtonLabel.BackgroundTransparency = 1
-			ButtonLabel.Text = Definition.DisplayName
-			ButtonLabel.TextColor3 = Theme.Colors.Text
-			ButtonLabel.FontFace = Theme.Fonts.Default
-			ButtonLabel.TextSize = Theme.TextSizes.Small
-			ButtonLabel.TextXAlignment = Enum.TextXAlignment.Left
-			ButtonLabel.ZIndex = Theme.ZIndex.Panel
-			ButtonLabel.Parent = NodeButton
+			local NodeLabel = Instance.new("TextLabel")
+			NodeLabel.Name = "Label"
+			NodeLabel.Size = UDim2.new(1, -16, 1, 0)
+			NodeLabel.Position = UDim2.fromOffset(12, 0)
+			NodeLabel.BackgroundTransparency = 1
+			NodeLabel.Text = Definition.DisplayName
+			NodeLabel.TextColor3 = Theme.Colors.Text
+			NodeLabel.FontFace = Theme.Fonts.Default
+			NodeLabel.TextSize = Theme.TextSizes.Default
+			NodeLabel.TextXAlignment = Enum.TextXAlignment.Left
+			NodeLabel.ZIndex = Theme.ZIndex.Panel + 1
+			NodeLabel.Parent = NodeButton
+
+			local Cleanup = Tooltip.Bind(NodeButton, Definition.Description or "")
+			table.insert(TooltipCleanups, Cleanup)
 
 			table.insert(Connections, NodeButton.MouseEnter:Connect(function()
 				NodeButton.BackgroundColor3 = Theme.Colors.SurfaceHover
@@ -168,24 +168,15 @@ function NodePalette.Create(Config: NodePaletteConfig): NodePaletteInstance
 				NodeButton.BackgroundColor3 = Theme.Colors.Surface
 			end))
 
-			table.insert(Connections, NodeButton.MouseButton1Click:Connect(function()
+			table.insert(Connections, NodeButton.Activated:Connect(function()
 				if Config.OnNodeSelected then
 					Config.OnNodeSelected(BlockType)
 				end
 			end))
-
-			if Definition.Description then
-				local Cleanup = Tooltip.Bind(NodeButton, Definition.Description)
-				table.insert(TooltipCleanups, Cleanup)
-			end
 		end
 	end
 
-	local PaletteInstance: NodePaletteInstance = {
-		Frame = Container,
-	} :: any
-
-	function PaletteInstance.Destroy()
+	local function Destroy()
 		for _, Connection in Connections do
 			Connection:Disconnect()
 		end
@@ -199,7 +190,10 @@ function NodePalette.Create(Config: NodePaletteConfig): NodePaletteInstance
 		Container:Destroy()
 	end
 
-	return PaletteInstance
+	return {
+		Frame = Container,
+		Destroy = Destroy,
+	}
 end
 
 return NodePalette

@@ -4,7 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local ActionTypes = require(Shared.Types.ActionTypes)
-local Handlers = require(script.Parent.Handlers)
+local Handlers = require(script.Parent.Parent.Handlers)
 
 type ExecutionContext = ActionTypes.ExecutionContext
 type Block = ActionTypes.Block

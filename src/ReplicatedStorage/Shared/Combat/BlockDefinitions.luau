@@ -3,12 +3,15 @@
 local BlockDefinitions = {}
 
 export type PortDirection = "Input" | "Output"
-export type PortType = "Flow" | "Signal"
+export type PortType = "Flow" | "Signal" | "Value"
+export type ValueType = "Number" | "Boolean" | "String" | "Vector3" | "Any"
 
 export type PortDefinition = {
 	Name: string,
 	Direction: PortDirection,
 	PortType: PortType,
+	ValueType: ValueType?,
+	PropertyKey: string?,
 }
 
 export type PropertyType = "String" | "Number" | "Boolean" | "Dropdown" | "AssetId" | "BranchDropdown"
@@ -22,6 +25,7 @@ export type PropertyDefinition = {
 	Max: number?,
 	Options: { string }?,
 	Tooltip: string?,
+	Wireable: boolean?,
 }
 
 export type BlockDefinition = {
@@ -32,6 +36,7 @@ export type BlockDefinition = {
 	Color: Color3,
 	Ports: { PortDefinition },
 	Properties: { PropertyDefinition },
+	Pure: boolean?,
 }
 
 local COLORS = {
@@ -42,6 +47,7 @@ local COLORS = {
 	Advanced = Color3.fromRGB(78, 138, 123),
 	Utility = Color3.fromRGB(90, 90, 95),
 	Condition = Color3.fromRGB(89, 134, 89),
+	Value = Color3.fromRGB(106, 135, 89),
 }
 
 local DEFINITIONS: { [string]: BlockDefinition } = {
@@ -66,9 +72,10 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 		Ports = {
 			{ Name = "In", Direction = "Input", PortType = "Flow" },
 			{ Name = "Out", Direction = "Output", PortType = "Flow" },
+			{ Name = "Time", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "Time" },
 		},
 		Properties = {
-			{ Key = "Time", Label = "Duration", Type = "Number", Default = 0.1, Min = 0, Max = 10, Tooltip = "Time in seconds." },
+			{ Key = "Time", Label = "Duration", Type = "Number", Default = 0.1, Min = 0, Max = 10, Tooltip = "Time in seconds.", Wireable = true },
 		},
 	},
 
@@ -112,10 +119,12 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 			{ Name = "In", Direction = "Input", PortType = "Flow" },
 			{ Name = "True", Direction = "Output", PortType = "Flow" },
 			{ Name = "False", Direction = "Output", PortType = "Flow" },
+			{ Name = "Condition", Direction = "Input", PortType = "Value", ValueType = "Boolean", PropertyKey = "ConditionValue" },
 		},
 		Properties = {
-			{ Key = "Check", Label = "Check", Type = "Dropdown", Default = "IsGrounded", Options = { "IsGrounded", "IsAirborne", "HasTarget", "IsBlocking", "IsStunned", "HealthAbove", "HealthBelow", "TargetInRange" }, Tooltip = "Condition to check." },
-			{ Key = "Value", Label = "Value", Type = "Number", Default = 50, Min = 0, Max = 100, Tooltip = "Threshold value for Health/Range checks." },
+			{ Key = "Check", Label = "Check", Type = "Dropdown", Default = "IsGrounded", Options = { "IsGrounded", "IsAirborne", "HasTarget", "IsBlocking", "IsStunned", "HealthAbove", "HealthBelow", "TargetInRange", "Custom" }, Tooltip = "Condition to check." },
+			{ Key = "Value", Label = "Value", Type = "Number", Default = 50, Min = 0, Max = 100, Tooltip = "Threshold value for Health/Range checks.", Wireable = true },
+			{ Key = "ConditionValue", Label = "Custom", Type = "Boolean", Default = false, Tooltip = "Custom condition from wire.", Wireable = true },
 		},
 	},
 
@@ -130,6 +139,8 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 			{ Name = "Out", Direction = "Output", PortType = "Flow" },
 			{ Name = "OnHit", Direction = "Output", PortType = "Signal" },
 			{ Name = "OnMiss", Direction = "Output", PortType = "Signal" },
+			{ Name = "Damage", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "Damage" },
+			{ Name = "Stun", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "Stun" },
 		},
 		Properties = {
 			{ Key = "X", Label = "Offset X", Type = "Number", Default = 0, Min = -20, Max = 20, Tooltip = "Horizontal offset." },
@@ -138,8 +149,8 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 			{ Key = "SizeX", Label = "Size X", Type = "Number", Default = 6, Min = 1, Max = 20, Tooltip = "Width." },
 			{ Key = "SizeY", Label = "Size Y", Type = "Number", Default = 6, Min = 1, Max = 20, Tooltip = "Height." },
 			{ Key = "SizeZ", Label = "Size Z", Type = "Number", Default = 6, Min = 1, Max = 20, Tooltip = "Depth." },
-			{ Key = "Damage", Label = "Damage", Type = "Number", Default = 10, Min = 0, Max = 100, Tooltip = "Damage dealt." },
-			{ Key = "Stun", Label = "Stun", Type = "Number", Default = 0.2, Min = 0, Max = 5, Tooltip = "Stun duration." },
+			{ Key = "Damage", Label = "Damage", Type = "Number", Default = 10, Min = 0, Max = 100, Tooltip = "Damage dealt.", Wireable = true },
+			{ Key = "Stun", Label = "Stun", Type = "Number", Default = 0.2, Min = 0, Max = 5, Tooltip = "Stun duration.", Wireable = true },
 			{ Key = "Blockable", Label = "Blockable", Type = "Boolean", Default = true, Tooltip = "Can be blocked." },
 		},
 	},
@@ -170,9 +181,10 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 		Ports = {
 			{ Name = "In", Direction = "Input", PortType = "Flow" },
 			{ Name = "Out", Direction = "Output", PortType = "Flow" },
+			{ Name = "Amount", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "Amount" },
 		},
 		Properties = {
-			{ Key = "Amount", Label = "Amount", Type = "Number", Default = 5, Min = -100, Max = 100, Tooltip = "Health to add." },
+			{ Key = "Amount", Label = "Amount", Type = "Number", Default = 5, Min = -100, Max = 100, Tooltip = "Health to add.", Wireable = true },
 		},
 	},
 
@@ -186,10 +198,11 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 			{ Name = "In", Direction = "Input", PortType = "Flow" },
 			{ Name = "Out", Direction = "Output", PortType = "Flow" },
 			{ Name = "OnComplete", Direction = "Output", PortType = "Signal" },
+			{ Name = "Speed", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "Speed" },
 		},
 		Properties = {
 			{ Key = "AnimationId", Label = "Animation ID", Type = "AssetId", Default = "", Tooltip = "Roblox animation asset ID." },
-			{ Key = "Speed", Label = "Speed", Type = "Number", Default = 1, Min = 0.1, Max = 5, Tooltip = "Playback speed." },
+			{ Key = "Speed", Label = "Speed", Type = "Number", Default = 1, Min = 0.1, Max = 5, Tooltip = "Playback speed.", Wireable = true },
 			{ Key = "Loop", Label = "Loop", Type = "Boolean", Default = false, Tooltip = "Loop until action ends." },
 		},
 	},
@@ -203,10 +216,11 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 		Ports = {
 			{ Name = "In", Direction = "Input", PortType = "Flow" },
 			{ Name = "Out", Direction = "Output", PortType = "Flow" },
+			{ Name = "Volume", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "Volume" },
 		},
 		Properties = {
 			{ Key = "SoundId", Label = "Sound ID", Type = "AssetId", Default = "", Tooltip = "Roblox sound asset ID." },
-			{ Key = "Volume", Label = "Volume", Type = "Number", Default = 1, Min = 0, Max = 2, Tooltip = "Volume level." },
+			{ Key = "Volume", Label = "Volume", Type = "Number", Default = 1, Min = 0, Max = 2, Tooltip = "Volume level.", Wireable = true },
 			{ Key = "Speed", Label = "Speed", Type = "Number", Default = 1, Min = 0.1, Max = 3, Tooltip = "Playback speed." },
 		},
 	},
@@ -220,11 +234,14 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 		Ports = {
 			{ Name = "In", Direction = "Input", PortType = "Flow" },
 			{ Name = "Out", Direction = "Output", PortType = "Flow" },
+			{ Name = "X", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "X" },
+			{ Name = "Y", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "Y" },
+			{ Name = "Z", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "Z" },
 		},
 		Properties = {
-			{ Key = "X", Label = "X", Type = "Number", Default = 0, Min = -100, Max = 100, Tooltip = "Horizontal velocity." },
-			{ Key = "Y", Label = "Y", Type = "Number", Default = 0, Min = -100, Max = 100, Tooltip = "Vertical velocity." },
-			{ Key = "Z", Label = "Z", Type = "Number", Default = 0, Min = -100, Max = 100, Tooltip = "Forward velocity." },
+			{ Key = "X", Label = "X", Type = "Number", Default = 0, Min = -100, Max = 100, Tooltip = "Horizontal velocity.", Wireable = true },
+			{ Key = "Y", Label = "Y", Type = "Number", Default = 0, Min = -100, Max = 100, Tooltip = "Vertical velocity.", Wireable = true },
+			{ Key = "Z", Label = "Z", Type = "Number", Default = 0, Min = -100, Max = 100, Tooltip = "Forward velocity.", Wireable = true },
 			{ Key = "Time", Label = "Duration", Type = "Number", Default = 0.1, Min = 0, Max = 2, Tooltip = "How long velocity applies." },
 			{ Key = "Fade", Label = "Fade", Type = "Boolean", Default = true, Tooltip = "Smoothly decrease over time." },
 			{ Key = "Track", Label = "Track Target", Type = "Boolean", Default = false, Tooltip = "Track toward last hit target." },
@@ -362,6 +379,264 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 			{ Key = "Text", Label = "Text", Type = "String", Default = "Note", Tooltip = "Comment text." },
 		},
 	},
+
+	Constant = {
+		BlockType = "Constant",
+		Category = "Value",
+		DisplayName = "Constant",
+		Description = "Outputs a constant value.",
+		Color = COLORS.Value,
+		Pure = true,
+		Ports = {
+			{ Name = "Value", Direction = "Output", PortType = "Value", ValueType = "Any" },
+		},
+		Properties = {
+			{ Key = "Type", Label = "Type", Type = "Dropdown", Default = "Number", Options = { "Number", "Boolean", "String" }, Tooltip = "Value type." },
+			{ Key = "NumberValue", Label = "Number", Type = "Number", Default = 0, Min = -9999, Max = 9999, Tooltip = "Number value." },
+			{ Key = "BooleanValue", Label = "Boolean", Type = "Boolean", Default = false, Tooltip = "Boolean value." },
+			{ Key = "StringValue", Label = "String", Type = "String", Default = "", Tooltip = "String value." },
+		},
+	},
+
+	GetHealth = {
+		BlockType = "GetHealth",
+		Category = "Value",
+		DisplayName = "Get Health",
+		Description = "Gets the current or max health of the entity.",
+		Color = COLORS.Value,
+		Pure = true,
+		Ports = {
+			{ Name = "Current", Direction = "Output", PortType = "Value", ValueType = "Number" },
+			{ Name = "Max", Direction = "Output", PortType = "Value", ValueType = "Number" },
+			{ Name = "Percent", Direction = "Output", PortType = "Value", ValueType = "Number" },
+		},
+		Properties = {
+			{ Key = "Target", Label = "Target", Type = "Dropdown", Default = "Self", Options = { "Self", "LastHit" }, Tooltip = "Whose health to get." },
+		},
+	},
+
+	GetDistance = {
+		BlockType = "GetDistance",
+		Category = "Value",
+		DisplayName = "Get Distance",
+		Description = "Gets the distance to the last hit target.",
+		Color = COLORS.Value,
+		Pure = true,
+		Ports = {
+			{ Name = "Distance", Direction = "Output", PortType = "Value", ValueType = "Number" },
+		},
+		Properties = {},
+	},
+
+	Compare = {
+		BlockType = "Compare",
+		Category = "Value",
+		DisplayName = "Compare",
+		Description = "Compares two numbers and outputs a boolean.",
+		Color = COLORS.Value,
+		Pure = true,
+		Ports = {
+			{ Name = "A", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "A" },
+			{ Name = "B", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "B" },
+			{ Name = "Result", Direction = "Output", PortType = "Value", ValueType = "Boolean" },
+		},
+		Properties = {
+			{ Key = "A", Label = "A", Type = "Number", Default = 0, Min = -9999, Max = 9999, Tooltip = "First value.", Wireable = true },
+			{ Key = "Operator", Label = "Operator", Type = "Dropdown", Default = ">", Options = { ">", "<", ">=", "<=", "==", "!=" }, Tooltip = "Comparison operator." },
+			{ Key = "B", Label = "B", Type = "Number", Default = 0, Min = -9999, Max = 9999, Tooltip = "Second value.", Wireable = true },
+		},
+	},
+
+	Math = {
+		BlockType = "Math",
+		Category = "Value",
+		DisplayName = "Math",
+		Description = "Performs a math operation on two numbers.",
+		Color = COLORS.Value,
+		Pure = true,
+		Ports = {
+			{ Name = "A", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "A" },
+			{ Name = "B", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "B" },
+			{ Name = "Result", Direction = "Output", PortType = "Value", ValueType = "Number" },
+		},
+		Properties = {
+			{ Key = "A", Label = "A", Type = "Number", Default = 0, Min = -9999, Max = 9999, Tooltip = "First operand.", Wireable = true },
+			{ Key = "Operator", Label = "Operator", Type = "Dropdown", Default = "+", Options = { "+", "-", "*", "/", "%", "^", "min", "max" }, Tooltip = "Math operator." },
+			{ Key = "B", Label = "B", Type = "Number", Default = 0, Min = -9999, Max = 9999, Tooltip = "Second operand.", Wireable = true },
+		},
+	},
+
+	Random = {
+		BlockType = "Random",
+		Category = "Value",
+		DisplayName = "Random",
+		Description = "Generates a random number between min and max.",
+		Color = COLORS.Value,
+		Pure = true,
+		Ports = {
+			{ Name = "Min", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "Min" },
+			{ Name = "Max", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "Max" },
+			{ Name = "Result", Direction = "Output", PortType = "Value", ValueType = "Number" },
+		},
+		Properties = {
+			{ Key = "Min", Label = "Min", Type = "Number", Default = 0, Min = -9999, Max = 9999, Tooltip = "Minimum value.", Wireable = true },
+			{ Key = "Max", Label = "Max", Type = "Number", Default = 1, Min = -9999, Max = 9999, Tooltip = "Maximum value.", Wireable = true },
+			{ Key = "Integer", Label = "Integer", Type = "Boolean", Default = false, Tooltip = "Round to integer." },
+		},
+	},
+
+	SignalToBool = {
+		BlockType = "SignalToBool",
+		Category = "Value",
+		DisplayName = "Signal to Bool",
+		Description = "Converts signal active state to boolean.",
+		Color = COLORS.Value,
+		Pure = true,
+		Ports = {
+			{ Name = "Signal", Direction = "Input", PortType = "Signal" },
+			{ Name = "Active", Direction = "Output", PortType = "Value", ValueType = "Boolean" },
+		},
+		Properties = {},
+	},
+
+	GetTag = {
+		BlockType = "GetTag",
+		Category = "Value",
+		DisplayName = "Get Tag",
+		Description = "Gets the value of a combat tag.",
+		Color = COLORS.Value,
+		Pure = true,
+		Ports = {
+			{ Name = "Value", Direction = "Output", PortType = "Value", ValueType = "Boolean" },
+		},
+		Properties = {
+			{ Key = "Tag", Label = "Tag", Type = "String", Default = "", Tooltip = "Tag name to check." },
+		},
+	},
+
+	Clamp = {
+		BlockType = "Clamp",
+		Category = "Value",
+		DisplayName = "Clamp",
+		Description = "Clamps a value between min and max.",
+		Color = COLORS.Value,
+		Pure = true,
+		Ports = {
+			{ Name = "Value", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "Value" },
+			{ Name = "Min", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "Min" },
+			{ Name = "Max", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "Max" },
+			{ Name = "Result", Direction = "Output", PortType = "Value", ValueType = "Number" },
+		},
+		Properties = {
+			{ Key = "Value", Label = "Value", Type = "Number", Default = 0, Min = -9999, Max = 9999, Tooltip = "Value to clamp.", Wireable = true },
+			{ Key = "Min", Label = "Min", Type = "Number", Default = 0, Min = -9999, Max = 9999, Tooltip = "Minimum.", Wireable = true },
+			{ Key = "Max", Label = "Max", Type = "Number", Default = 1, Min = -9999, Max = 9999, Tooltip = "Maximum.", Wireable = true },
+		},
+	},
+
+	Lerp = {
+		BlockType = "Lerp",
+		Category = "Value",
+		DisplayName = "Lerp",
+		Description = "Linearly interpolates between two values.",
+		Color = COLORS.Value,
+		Pure = true,
+		Ports = {
+			{ Name = "From", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "From" },
+			{ Name = "To", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "To" },
+			{ Name = "Alpha", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "Alpha" },
+			{ Name = "Result", Direction = "Output", PortType = "Value", ValueType = "Number" },
+		},
+		Properties = {
+			{ Key = "From", Label = "From", Type = "Number", Default = 0, Min = -9999, Max = 9999, Tooltip = "Start value.", Wireable = true },
+			{ Key = "To", Label = "To", Type = "Number", Default = 1, Min = -9999, Max = 9999, Tooltip = "End value.", Wireable = true },
+			{ Key = "Alpha", Label = "Alpha", Type = "Number", Default = 0.5, Min = 0, Max = 1, Tooltip = "Interpolation factor.", Wireable = true },
+		},
+	},
+
+	Abs = {
+		BlockType = "Abs",
+		Category = "Value",
+		DisplayName = "Absolute",
+		Description = "Returns the absolute value of a number.",
+		Color = COLORS.Value,
+		Pure = true,
+		Ports = {
+			{ Name = "Value", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "Value" },
+			{ Name = "Result", Direction = "Output", PortType = "Value", ValueType = "Number" },
+		},
+		Properties = {
+			{ Key = "Value", Label = "Value", Type = "Number", Default = 0, Min = -9999, Max = 9999, Tooltip = "Input value.", Wireable = true },
+		},
+	},
+
+	Negate = {
+		BlockType = "Negate",
+		Category = "Value",
+		DisplayName = "Negate",
+		Description = "Returns the negative of a number.",
+		Color = COLORS.Value,
+		Pure = true,
+		Ports = {
+			{ Name = "Value", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "Value" },
+			{ Name = "Result", Direction = "Output", PortType = "Value", ValueType = "Number" },
+		},
+		Properties = {
+			{ Key = "Value", Label = "Value", Type = "Number", Default = 0, Min = -9999, Max = 9999, Tooltip = "Input value.", Wireable = true },
+		},
+	},
+
+	BoolNot = {
+		BlockType = "BoolNot",
+		Category = "Value",
+		DisplayName = "NOT",
+		Description = "Returns the logical NOT of a boolean.",
+		Color = COLORS.Value,
+		Pure = true,
+		Ports = {
+			{ Name = "Value", Direction = "Input", PortType = "Value", ValueType = "Boolean", PropertyKey = "Value" },
+			{ Name = "Result", Direction = "Output", PortType = "Value", ValueType = "Boolean" },
+		},
+		Properties = {
+			{ Key = "Value", Label = "Value", Type = "Boolean", Default = false, Tooltip = "Input value.", Wireable = true },
+		},
+	},
+
+	BoolAnd = {
+		BlockType = "BoolAnd",
+		Category = "Value",
+		DisplayName = "AND",
+		Description = "Returns the logical AND of two booleans.",
+		Color = COLORS.Value,
+		Pure = true,
+		Ports = {
+			{ Name = "A", Direction = "Input", PortType = "Value", ValueType = "Boolean", PropertyKey = "A" },
+			{ Name = "B", Direction = "Input", PortType = "Value", ValueType = "Boolean", PropertyKey = "B" },
+			{ Name = "Result", Direction = "Output", PortType = "Value", ValueType = "Boolean" },
+		},
+		Properties = {
+			{ Key = "A", Label = "A", Type = "Boolean", Default = false, Tooltip = "First value.", Wireable = true },
+			{ Key = "B", Label = "B", Type = "Boolean", Default = false, Tooltip = "Second value.", Wireable = true },
+		},
+	},
+
+	BoolOr = {
+		BlockType = "BoolOr",
+		Category = "Value",
+		DisplayName = "OR",
+		Description = "Returns the logical OR of two booleans.",
+		Color = COLORS.Value,
+		Pure = true,
+		Ports = {
+			{ Name = "A", Direction = "Input", PortType = "Value", ValueType = "Boolean", PropertyKey = "A" },
+			{ Name = "B", Direction = "Input", PortType = "Value", ValueType = "Boolean", PropertyKey = "B" },
+			{ Name = "Result", Direction = "Output", PortType = "Value", ValueType = "Boolean" },
+		},
+		Properties = {
+			{ Key = "A", Label = "A", Type = "Boolean", Default = false, Tooltip = "First value.", Wireable = true },
+			{ Key = "B", Label = "B", Type = "Boolean", Default = false, Tooltip = "Second value.", Wireable = true },
+		},
+	},
 }
 
 local CATEGORIES = {
@@ -369,6 +644,8 @@ local CATEGORIES = {
 	{ Name = "Combat", Types = { "Hitbox", "HitCancel", "AddHealth" } },
 	{ Name = "Effects", Types = { "Animation", "Sound", "Velocity" } },
 	{ Name = "Logic", Types = { "Signal", "AndGate", "OrGate", "NotGate", "Timer", "Counter" } },
+	{ Name = "Value", Types = { "Constant", "GetHealth", "GetDistance", "Compare", "Math", "Random", "Clamp", "Lerp", "Abs", "Negate" } },
+	{ Name = "Boolean", Types = { "BoolNot", "BoolAnd", "BoolOr", "SignalToBool", "GetTag" } },
 	{ Name = "Advanced", Types = { "SubAction" } },
 	{ Name = "Utility", Types = { "Comment" } },
 }
@@ -468,6 +745,28 @@ function BlockDefinitions.GetSignalOutputs(BlockType: string): { PortDefinition 
 	return SignalPorts
 end
 
+function BlockDefinitions.GetValueInputs(BlockType: string): { PortDefinition }
+	local InputPorts = BlockDefinitions.GetInputPorts(BlockType)
+	local ValuePorts: { PortDefinition } = {}
+	for _, Port in InputPorts do
+		if Port.PortType == "Value" then
+			table.insert(ValuePorts, Port)
+		end
+	end
+	return ValuePorts
+end
+
+function BlockDefinitions.GetValueOutputs(BlockType: string): { PortDefinition }
+	local OutputPorts = BlockDefinitions.GetOutputPorts(BlockType)
+	local ValuePorts: { PortDefinition } = {}
+	for _, Port in OutputPorts do
+		if Port.PortType == "Value" then
+			table.insert(ValuePorts, Port)
+		end
+	end
+	return ValuePorts
+end
+
 function BlockDefinitions.GetDefaultProperties(BlockType: string): { [string]: any }
 	local Definition = DEFINITIONS[BlockType]
 	if not Definition then
@@ -479,6 +778,29 @@ function BlockDefinitions.GetDefaultProperties(BlockType: string): { [string]: a
 		Defaults[PropertyDef.Key] = PropertyDef.Default
 	end
 	return Defaults
+end
+
+function BlockDefinitions.GetWireableProperties(BlockType: string): { PropertyDefinition }
+	local Definition = DEFINITIONS[BlockType]
+	if not Definition then
+		return {}
+	end
+
+	local Wireable: { PropertyDefinition } = {}
+	for _, PropertyDef in Definition.Properties do
+		if PropertyDef.Wireable then
+			table.insert(Wireable, PropertyDef)
+		end
+	end
+	return Wireable
+end
+
+function BlockDefinitions.IsPure(BlockType: string): boolean
+	local Definition = DEFINITIONS[BlockType]
+	if not Definition then
+		return false
+	end
+	return Definition.Pure == true
 end
 
 function BlockDefinitions.GetColors(): { [string]: Color3 }

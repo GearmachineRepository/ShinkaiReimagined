@@ -10,7 +10,7 @@ local ActionRegistry: any = nil
 
 local function GetActionRegistry(): any
     if not ActionRegistry then
-        ActionRegistry = require(Shared.Combat.ActionRegistry)
+        ActionRegistry = require(Shared.Combat.Registries.ActionRegistry)
     end
     return ActionRegistry
 end
@@ -33,7 +33,7 @@ function ActionHandler.Execute(Block: any, Context: any): any?
         return nil
     end
 
-    local ActionExecutor = require(script.Parent.Parent.ActionExecutor)
+    local ActionExecutor = require(Shared.Combat.Runtime.ActionExecutor)
     local SubContext = ActionExecutor.Execute(Context.Entity, ActionDef, Context.EventBus)
 
     for _, Record in SubContext.HitRecords do

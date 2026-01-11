@@ -9,40 +9,6 @@ local NodeFactory = require(script.Parent.Parent.Nodes.NodeFactory)
 
 local ActionSerializer = {}
 
-local function SerializeWires(Wires: { Types.WireInstance }): { any }
-	local Serialized = {}
-	for _, WireData in Wires do
-		table.insert(Serialized, {
-			WireId = WireData.WireId,
-			FromNodeId = WireData.FromNodeId,
-			FromPortName = WireData.FromPortName,
-			ToNodeId = WireData.ToNodeId,
-			ToPortName = WireData.ToPortName,
-			WireType = WireData.WireType,
-		})
-	end
-	return Serialized
-end
-
-local function DeserializeWires(SerializedWires: { any }?): { Types.WireInstance }
-	if not SerializedWires then
-		return {}
-	end
-
-	local Wires: { Types.WireInstance } = {}
-	for _, Data in SerializedWires do
-		table.insert(Wires, {
-			WireId = Data.WireId or HttpService:GenerateGUID(false),
-			FromNodeId = Data.FromNodeId or "",
-			FromPortName = Data.FromPortName or "",
-			ToNodeId = Data.ToNodeId or "",
-			ToPortName = Data.ToPortName or "",
-			WireType = Data.WireType or "Flow",
-		})
-	end
-	return Wires
-end
-
 local function SerializeComments(Comments: { Types.CommentData }?): { any }
 	if not Comments then
 		return {}
@@ -106,7 +72,181 @@ local function DeserializeComments(SerializedComments: { any }?): { Types.Commen
 	return Comments
 end
 
-function ActionSerializer.Import(ActionData: any): Types.EditorState
+local function SerializeNode(NodeData: Types.NodeInstance): any
+	local Node: any = {
+		NodeId = NodeData.NodeId,
+		BlockType = NodeData.BlockType,
+		EditorPosition = {
+			X = NodeData.Position.X,
+			Y = NodeData.Position.Y,
+		},
+	}
+
+	if NodeData.BlockType == "BranchStart" then
+		return Node
+	end
+
+	local Block = NodeFactory.NodeToBlock(NodeData)
+	if Block then
+		for Key, Value in Block do
+			if Key ~= "BlockType" and Key ~= "BlockId" and Key ~= "EditorPosition" then
+				Node[Key] = Value
+			end
+		end
+	end
+
+	return Node
+end
+
+local function SerializeWire(WireData: Types.WireInstance): any
+	return {
+		WireId = WireData.WireId,
+		FromNode = WireData.FromNodeId,
+		FromPort = WireData.FromPortName,
+		ToNode = WireData.ToNodeId,
+		ToPort = WireData.ToPortName,
+	}
+end
+
+local function SerializeBranch(Branch: Types.BranchData): any
+	local Nodes: { [string]: any } = {}
+	local Wires: { any } = {}
+
+	for _, NodeData in Branch.Nodes do
+		local SerializedNode = SerializeNode(NodeData)
+		Nodes[NodeData.NodeId] = SerializedNode
+	end
+
+	for _, WireData in Branch.Wires do
+		local SerializedWire = SerializeWire(WireData)
+		table.insert(Wires, SerializedWire)
+	end
+
+	return {
+		Entry = Branch.IsEntry,
+		Nodes = Nodes,
+		Wires = Wires,
+	}
+end
+
+function ActionSerializer.Export(State: Types.EditorState): any
+	local ActionData: any = {
+		ActionId = State.ActionId,
+		DisplayName = State.DisplayName,
+		IsPlayerMade = true,
+		Branches = {},
+	}
+
+	local EditorComments: { [string]: any } = {}
+
+	for _, Branch in State.Branches do
+		ActionData.Branches[Branch.BranchName] = SerializeBranch(Branch)
+
+		if Branch.Comments and #Branch.Comments > 0 then
+			EditorComments[Branch.BranchName] = SerializeComments(Branch.Comments)
+		end
+	end
+
+	if next(EditorComments) then
+		ActionData.EditorData = {
+			Comments = EditorComments,
+		}
+	end
+
+	return ActionData
+end
+
+local function DeserializeNode(NodeId: string, NodeData: any): Types.NodeInstance
+	local Position = Vector2.new(100, 0)
+	if NodeData.EditorPosition then
+		Position = Vector2.new(
+			NodeData.EditorPosition.X or 100,
+			NodeData.EditorPosition.Y or 0
+		)
+	end
+
+	if NodeData.BlockType == "BranchStart" then
+		return {
+			NodeId = NodeId,
+			BlockType = "BranchStart",
+			Position = Position,
+			Properties = {},
+			Block = nil,
+		}
+	end
+
+	local Block: any = {
+		BlockType = NodeData.BlockType,
+		BlockId = NodeId,
+	}
+
+	for Key, Value in NodeData do
+		if Key ~= "NodeId" and Key ~= "BlockType" and Key ~= "EditorPosition" then
+			Block[Key] = Value
+		end
+	end
+
+	return NodeFactory.BlockToNode(Block, Position)
+end
+
+local function DeserializeWire(WireData: any): Types.WireInstance
+	return {
+		WireId = WireData.WireId or HttpService:GenerateGUID(false),
+		FromNodeId = WireData.FromNode or "",
+		FromPortName = WireData.FromPort or "",
+		ToNodeId = WireData.ToNode or "",
+		ToPortName = WireData.ToPort or "",
+		WireType = WireData.WireType or "Flow",
+	}
+end
+
+local function DeserializeBranch(BranchName: string, BranchData: any, Comments: { Types.CommentData }?): Types.BranchData
+	local BranchId = HttpService:GenerateGUID(false)
+	local Nodes: { Types.NodeInstance } = {}
+	local Wires: { Types.WireInstance } = {}
+
+	if BranchData.Nodes then
+		for NodeId, NodeData in BranchData.Nodes do
+			local Node = DeserializeNode(NodeId, NodeData)
+			table.insert(Nodes, Node)
+		end
+	end
+
+	if BranchData.Wires then
+		for _, WireData in BranchData.Wires do
+			local Wire = DeserializeWire(WireData)
+			table.insert(Wires, Wire)
+		end
+	end
+
+	return {
+		BranchId = BranchId,
+		BranchName = BranchName,
+		IsEntry = BranchData.Entry == true,
+		Nodes = Nodes,
+		Wires = Wires,
+		Comments = Comments or {},
+		Position = Vector2.zero,
+	}
+end
+
+local function IsLegacyFormat(ActionData: any): boolean
+	if ActionData.Timeline then
+		return true
+	end
+
+	if ActionData.Branches then
+		for _, BranchData in ActionData.Branches do
+			if BranchData.Timeline and not BranchData.Nodes then
+				return true
+			end
+		end
+	end
+
+	return false
+end
+
+local function ImportLegacy(ActionData: any): Types.EditorState
 	local State: Types.EditorState = {
 		ActionId = ActionData.ActionId or "",
 		DisplayName = ActionData.DisplayName or "Imported Action",
@@ -127,6 +267,7 @@ function ActionSerializer.Import(ActionData: any): Types.EditorState
 
 	local function CreateBranchStartNode(BranchName: string, FallbackX: number): Types.NodeInstance
 		local SavedData = EditorBranchStarts[BranchName]
+
 		local Position = Vector2.new(FallbackX, 0)
 		local NodeId = HttpService:GenerateGUID(false)
 
@@ -148,6 +289,25 @@ function ActionSerializer.Import(ActionData: any): Types.EditorState
 		}
 	end
 
+	local function DeserializeLegacyWires(SerializedWires: { any }?): { Types.WireInstance }
+		if not SerializedWires then
+			return {}
+		end
+
+		local Wires: { Types.WireInstance } = {}
+		for _, Data in SerializedWires do
+			table.insert(Wires, {
+				WireId = Data.WireId or HttpService:GenerateGUID(false),
+				FromNodeId = Data.FromNodeId or "",
+				FromPortName = Data.FromPortName or "",
+				ToNodeId = Data.ToNodeId or "",
+				ToPortName = Data.ToPortName or "",
+				WireType = Data.WireType or "Flow",
+			})
+		end
+		return Wires
+	end
+
 	if ActionData.Timeline then
 		local BranchId = HttpService:GenerateGUID(false)
 		local Nodes: { Types.NodeInstance } = {}
@@ -164,7 +324,7 @@ function ActionSerializer.Import(ActionData: any): Types.EditorState
 			FallbackPositionX = FallbackPositionX + Theme.Sizes.NodeWidth + 40
 		end
 
-		local BranchWires = DeserializeWires(EditorWires["Main"] or EditorWires[1])
+		local BranchWires = DeserializeLegacyWires(EditorWires["Main"] or EditorWires[1])
 		local BranchComments = DeserializeComments(EditorComments["Main"])
 
 		State.Branches[BranchId] = {
@@ -195,7 +355,7 @@ function ActionSerializer.Import(ActionData: any): Types.EditorState
 				end
 			end
 
-			local BranchWires = DeserializeWires(EditorWires[BranchName])
+			local BranchWires = DeserializeLegacyWires(EditorWires[BranchName])
 			local BranchComments = DeserializeComments(EditorComments[BranchName])
 
 			State.Branches[BranchId] = {
@@ -213,80 +373,36 @@ function ActionSerializer.Import(ActionData: any): Types.EditorState
 	return State
 end
 
-function ActionSerializer.Export(State: Types.EditorState): any
-	local ActionData: any = {
-		ActionId = State.ActionId,
-		DisplayName = State.DisplayName,
-		IsPlayerMade = true,
-	}
-
-	local BranchCount = 0
-	for _ in State.Branches do
-		BranchCount = BranchCount + 1
+function ActionSerializer.Import(ActionData: any): Types.EditorState
+	if IsLegacyFormat(ActionData) then
+		return ImportLegacy(ActionData)
 	end
 
-	local EditorWires: { [string]: any } = {}
-	local EditorComments: { [string]: any } = {}
-	local EditorBranchStarts: { [string]: any } = {}
+	local State: Types.EditorState = {
+		ActionId = ActionData.ActionId or "",
+		DisplayName = ActionData.DisplayName or "Imported Action",
+		Branches = {},
+		SelectedNodeId = nil,
+		SelectedBranchId = nil,
+		SelectedWireId = nil,
+		SelectedCommentId = nil,
+		CanvasOffset = Vector2.zero,
+		CanvasZoom = 1,
+		IsDirty = false,
+	}
 
-	if BranchCount == 1 then
-		for _, Branch in State.Branches do
-			if Branch.IsEntry then
-				local Timeline = {}
-				for _, NodeData in Branch.Nodes do
-					if NodeData.BlockType == "BranchStart" then
-						EditorBranchStarts["Main"] = {
-							NodeId = NodeData.NodeId,
-							Position = {
-								X = NodeData.Position.X,
-								Y = NodeData.Position.Y,
-							},
-						}
-					else
-						local Block = NodeFactory.NodeToBlock(NodeData)
-						table.insert(Timeline, Block)
-					end
-				end
-				ActionData.Timeline = Timeline
-				EditorWires["Main"] = SerializeWires(Branch.Wires)
-				EditorComments["Main"] = SerializeComments(Branch.Comments)
-				break
-			end
-		end
-	else
-		ActionData.Branches = {}
-		for _, Branch in State.Branches do
-			local Timeline = {}
-			for _, NodeData in Branch.Nodes do
-				if NodeData.BlockType == "BranchStart" then
-					EditorBranchStarts[Branch.BranchName] = {
-						NodeId = NodeData.NodeId,
-						Position = {
-							X = NodeData.Position.X,
-							Y = NodeData.Position.Y,
-						},
-					}
-				else
-					local Block = NodeFactory.NodeToBlock(NodeData)
-					table.insert(Timeline, Block)
-				end
-			end
-			ActionData.Branches[Branch.BranchName] = {
-				Entry = Branch.IsEntry,
-				Timeline = Timeline,
-			}
-			EditorWires[Branch.BranchName] = SerializeWires(Branch.Wires)
-			EditorComments[Branch.BranchName] = SerializeComments(Branch.Comments)
+	local EditorData = ActionData.EditorData or {}
+	local EditorComments = EditorData.Comments or {}
+
+	if ActionData.Branches then
+		for BranchName, BranchData in ActionData.Branches do
+			local Comments = DeserializeComments(EditorComments[BranchName])
+			local Branch = DeserializeBranch(BranchName, BranchData, Comments)
+			State.Branches[Branch.BranchId] = Branch
 		end
 	end
 
-	ActionData.EditorData = {
-		Wires = EditorWires,
-		Comments = EditorComments,
-		BranchStarts = EditorBranchStarts,
-	}
-
-	return ActionData
+	return State
 end
 
 function ActionSerializer.ToJson(ActionData: any): string

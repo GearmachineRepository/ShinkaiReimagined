@@ -284,6 +284,7 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		OnSave = function()
 			if Config.OnSave then
 				local ActionData = ActionSerializer.Export(EditorState.Get())
+				print(ActionData)
 				local Success = Config.OnSave(ActionData)
 				if Success ~= false then
 					EditorState.ClearDirty()
