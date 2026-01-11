@@ -637,6 +637,26 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 			{ Key = "B", Label = "B", Type = "Boolean", Default = false, Tooltip = "Second value.", Wireable = true },
 		},
 	},
+
+	Select = {
+		BlockType = "Select",
+		Category = "Value",
+		DisplayName = "Select",
+		Description = "Outputs A if condition is true, otherwise B.",
+		Color = COLORS.Value,
+		Pure = true,
+		Ports = {
+			{ Name = "Condition", Direction = "Input", PortType = "Value", ValueType = "Boolean", PropertyKey = "Condition" },
+			{ Name = "A", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "A" },
+			{ Name = "B", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "B" },
+			{ Name = "Result", Direction = "Output", PortType = "Value", ValueType = "Number" },
+		},
+		Properties = {
+			{ Key = "Condition", Label = "Condition", Type = "Boolean", Default = true, Tooltip = "Selection condition.", Wireable = true },
+			{ Key = "A", Label = "If True", Type = "Number", Default = 0, Min = -9999, Max = 9999, Tooltip = "Value when true.", Wireable = true },
+			{ Key = "B", Label = "If False", Type = "Number", Default = 0, Min = -9999, Max = 9999, Tooltip = "Value when false.", Wireable = true },
+		},
+	},
 }
 
 local CATEGORIES = {
@@ -644,7 +664,7 @@ local CATEGORIES = {
 	{ Name = "Combat", Types = { "Hitbox", "HitCancel", "AddHealth" } },
 	{ Name = "Effects", Types = { "Animation", "Sound", "Velocity" } },
 	{ Name = "Logic", Types = { "Signal", "AndGate", "OrGate", "NotGate", "Timer", "Counter" } },
-	{ Name = "Value", Types = { "Constant", "GetHealth", "GetDistance", "Compare", "Math", "Random", "Clamp", "Lerp", "Abs", "Negate" } },
+	{ Name = "Value", Types = { "Constant", "GetHealth", "GetDistance", "Compare", "Math", "Random", "Clamp", "Lerp", "Abs", "Negate", "Select" } },
 	{ Name = "Boolean", Types = { "BoolNot", "BoolAnd", "BoolOr", "SignalToBool", "GetTag" } },
 	{ Name = "Advanced", Types = { "SubAction" } },
 	{ Name = "Utility", Types = { "Comment" } },

@@ -29,6 +29,16 @@ export type PortInstance = {
 	Destroy: () -> (),
 }
 
+local INNER_DARKEN_FACTOR = 0.85
+
+local function DarkenColor(Color: Color3, Factor: number): Color3
+	return Color3.new(
+		Color.R * Factor,
+		Color.G * Factor,
+		Color.B * Factor
+	)
+end
+
 function Port.Create(Config: PortConfig): PortInstance
 	local PortColor = Theme.GetPortColor(Config.PortType)
 	local _IsConnected = false
@@ -50,6 +60,20 @@ function Port.Create(Config: PortConfig): PortInstance
 	PortCircle.Parent = Container
 
 	Theme.ApplyCorner(PortCircle, UDim.new(0.5, 0))
+
+	local INNER_CIRCLE_SCALE = 0.55
+
+	local PortInnerCircle = Instance.new("Frame")
+	PortInnerCircle.Name = "InnerCircle"
+	PortInnerCircle.Size = UDim2.fromScale(INNER_CIRCLE_SCALE, INNER_CIRCLE_SCALE)
+	PortInnerCircle.Position = UDim2.fromScale(0.5, 0.5)
+	PortInnerCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+	PortInnerCircle.BackgroundColor3 = DarkenColor(PortColor, INNER_DARKEN_FACTOR)
+	PortInnerCircle.BorderSizePixel = 0
+	PortInnerCircle.ZIndex = Theme.ZIndex.Port + 2
+	PortInnerCircle.Parent = PortCircle
+
+	Theme.ApplyCorner(PortInnerCircle, UDim.new(0.5, 0))
 
 	local PortLabel = Instance.new("TextLabel")
 	PortLabel.Name = "Label"
@@ -144,8 +168,10 @@ function Port.Create(Config: PortConfig): PortInstance
 		_IsHighlighted = Highlighted
 		if Highlighted then
 			PortCircle.BackgroundColor3 = Theme.Colors.BorderFocus
+			PortInnerCircle.BackgroundColor3 = DarkenColor(PortCircle.BackgroundColor3, INNER_DARKEN_FACTOR)
 		else
 			PortCircle.BackgroundColor3 = PortColor
+			PortInnerCircle.BackgroundColor3 = DarkenColor(PortColor, INNER_DARKEN_FACTOR)
 		end
 	end
 

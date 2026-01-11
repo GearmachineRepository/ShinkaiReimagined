@@ -84,9 +84,10 @@ function WireManager.Delete(WireId: string): boolean
 
 	for Index, WireData in Branch.Wires do
 		if WireData.WireId == WireId then
+			local DeletedWireData = WireData
 			table.remove(Branch.Wires, Index)
 			EditorState.MarkDirty()
-			WireDeletedSignal:Fire(WireId)
+			WireDeletedSignal:Fire(WireId, DeletedWireData)
 			return true
 		end
 	end
@@ -100,27 +101,67 @@ function WireManager.DeleteByNode(NodeId: string): { string }
 		return {}
 	end
 
-	local DeletedWireIds: { string } = {}
+	local DeletedWires: { { WireId: string, WireData: Types.WireInstance } } = {}
 	local WiresToKeep: { Types.WireInstance } = {}
 
 	for _, WireData in Branch.Wires do
 		if WireData.FromNodeId == NodeId or WireData.ToNodeId == NodeId then
-			table.insert(DeletedWireIds, WireData.WireId)
+			table.insert(DeletedWires, { WireId = WireData.WireId, WireData = WireData })
 		else
 			table.insert(WiresToKeep, WireData)
 		end
 	end
 
-	if #DeletedWireIds > 0 then
+	if #DeletedWires > 0 then
 		Branch.Wires = WiresToKeep
 		EditorState.MarkDirty()
 
-		for _, WireId in DeletedWireIds do
-			WireDeletedSignal:Fire(WireId)
+		for _, Deleted in DeletedWires do
+			WireDeletedSignal:Fire(Deleted.WireId, Deleted.WireData)
 		end
 	end
 
-	return DeletedWireIds
+	local DeletedIds: { string } = {}
+	for _, Deleted in DeletedWires do
+		table.insert(DeletedIds, Deleted.WireId)
+	end
+	return DeletedIds
+end
+
+function WireManager.DeleteByPort(NodeId: string, PortName: string): { string }
+	local Branch = BranchManager.GetCurrent()
+	if not Branch then
+		return {}
+	end
+
+	local DeletedWires: { { WireId: string, WireData: Types.WireInstance } } = {}
+	local WiresToKeep: { Types.WireInstance } = {}
+
+	for _, WireData in Branch.Wires do
+		local MatchesFrom = WireData.FromNodeId == NodeId and WireData.FromPortName == PortName
+		local MatchesTo = WireData.ToNodeId == NodeId and WireData.ToPortName == PortName
+
+		if MatchesFrom or MatchesTo then
+			table.insert(DeletedWires, { WireId = WireData.WireId, WireData = WireData })
+		else
+			table.insert(WiresToKeep, WireData)
+		end
+	end
+
+	if #DeletedWires > 0 then
+		Branch.Wires = WiresToKeep
+		EditorState.MarkDirty()
+
+		for _, Deleted in DeletedWires do
+			WireDeletedSignal:Fire(Deleted.WireId, Deleted.WireData)
+		end
+	end
+
+	local DeletedIds: { string } = {}
+	for _, Deleted in DeletedWires do
+		table.insert(DeletedIds, Deleted.WireId)
+	end
+	return DeletedIds
 end
 
 function WireManager.GetById(WireId: string): Types.WireInstance?
@@ -161,6 +202,30 @@ function WireManager.GetByNode(NodeId: string): { Types.WireInstance }
 	end
 
 	return Wires
+end
+
+function WireManager.GetByPort(NodeId: string, PortName: string): { Types.WireInstance }
+	local Branch = BranchManager.GetCurrent()
+	if not Branch then
+		return {}
+	end
+
+	local Wires: { Types.WireInstance } = {}
+	for _, WireData in Branch.Wires do
+		local MatchesFrom = WireData.FromNodeId == NodeId and WireData.FromPortName == PortName
+		local MatchesTo = WireData.ToNodeId == NodeId and WireData.ToPortName == PortName
+
+		if MatchesFrom or MatchesTo then
+			table.insert(Wires, WireData)
+		end
+	end
+
+	return Wires
+end
+
+function WireManager.IsPortWired(NodeId: string, PortName: string): boolean
+	local Wires = WireManager.GetByPort(NodeId, PortName)
+	return #Wires > 0
 end
 
 function WireManager.WireExists(

@@ -16,14 +16,21 @@ local DISTANCE_FAR = 500
 
 local CURVATURE_SEGMENT_BONUS = 0.7
 local WIRE_CURVATURE = 80
+local CURVE_DIRECTION_SMOOTH_RANGE_PIXELS = 80
 
 local FADE_MAX_TRANSPARENCY = 0.85
 local FADE_OPAQUE_FRACTION = 0.25
 local FADE_GAMMA = 1.8
 
 local GRADIENT_START_COLOR = Color3.new(1, 1, 1)
-local GRADIENT_WHITE_FRACTION = 0.18 -- how long it stays white near the start
-local GRADIENT_GAMMA = 0.5 -- ow “snappy” the transition is (higher = stays whiter longer, then ramps faster)
+local GRADIENT_WHITE_FRACTION = 0.18
+local GRADIENT_GAMMA = 0.5
+
+local SNAPPED_COLOR = Color3.new(1, 1, 1)
+local SNAPPED_COLOR_BLEND = 0.6
+
+local PLUS_SIZE = 14
+local PLUS_THICKNESS = 2
 
 export type WireConfig = {
 	WireId: string,
@@ -41,6 +48,8 @@ export type WireInstance = {
 	SetCanvasPositions: (StartPosition: Vector2, EndPosition: Vector2) -> (),
 	SetHighlighted: (Highlighted: boolean) -> (),
 	SetSelected: (Selected: boolean) -> (),
+	SetSnapped: (Snapped: boolean) -> (),
+	SetPlusIndicatorVisible: (Visible: boolean) -> (),
 	Destroy: () -> (),
 }
 
@@ -75,6 +84,47 @@ local function ComputeSegmentCount(Distance: number, CurvatureFactor: number): n
 	return math.clamp(ScaledSegments, MIN_SEGMENTS, MAX_SEGMENTS)
 end
 
+local function CreatePlusIndicator(Parent: GuiObject, ZIndex: number): Frame
+	local PlusContainer = Instance.new("Frame")
+	PlusContainer.Name = "PlusIndicator"
+	PlusContainer.Size = UDim2.fromOffset(PLUS_SIZE, PLUS_SIZE)
+	PlusContainer.BackgroundTransparency = 1
+	PlusContainer.AnchorPoint = Vector2.new(0.5, 0.5)
+	PlusContainer.ZIndex = ZIndex + 10
+	PlusContainer.Visible = false
+	PlusContainer.Parent = Parent
+
+	local HorizontalBar = Instance.new("Frame")
+	HorizontalBar.Name = "Horizontal"
+	HorizontalBar.Size = UDim2.new(1, 0, 0, PLUS_THICKNESS)
+	HorizontalBar.Position = UDim2.fromScale(0, 0.5)
+	HorizontalBar.AnchorPoint = Vector2.new(0, 0.5)
+	HorizontalBar.BackgroundColor3 = Color3.new(1, 1, 1)
+	HorizontalBar.BorderSizePixel = 0
+	HorizontalBar.ZIndex = ZIndex + 10
+	HorizontalBar.Parent = PlusContainer
+
+	local HorizontalCorner = Instance.new("UICorner")
+	HorizontalCorner.CornerRadius = UDim.new(0, 1)
+	HorizontalCorner.Parent = HorizontalBar
+
+	local VerticalBar = Instance.new("Frame")
+	VerticalBar.Name = "Vertical"
+	VerticalBar.Size = UDim2.new(0, PLUS_THICKNESS, 1, 0)
+	VerticalBar.Position = UDim2.fromScale(0.5, 0)
+	VerticalBar.AnchorPoint = Vector2.new(0.5, 0)
+	VerticalBar.BackgroundColor3 = Color3.new(1, 1, 1)
+	VerticalBar.BorderSizePixel = 0
+	VerticalBar.ZIndex = ZIndex + 10
+	VerticalBar.Parent = PlusContainer
+
+	local VerticalCorner = Instance.new("UICorner")
+	VerticalCorner.CornerRadius = UDim.new(0, 1)
+	VerticalCorner.Parent = VerticalBar
+
+	return PlusContainer
+end
+
 function Wire.Create(Config: WireConfig): WireInstance
 	local IsPreviewWire = Config.WireId == "Preview"
 	local WireColor = Theme.GetWireColor(Config.WireType)
@@ -83,6 +133,7 @@ function Wire.Create(Config: WireConfig): WireInstance
 	local IsHighlighted = false
 	local FadeEnabled = IsPreviewWire
 	local IsSelected = false
+	local IsSnapped = false
 
 	local Container = Instance.new("Frame")
 	Container.Name = "Wire_" .. Config.WireId
@@ -96,9 +147,40 @@ function Wire.Create(Config: WireConfig): WireInstance
 	local ClickDetectors: { TextButton } = {}
 	local ActiveSegmentCount = 0
 
+	local PlusIndicator: Frame? = nil
+	if IsPreviewWire then
+		PlusIndicator = CreatePlusIndicator(Container, Theme.ZIndex.Wire)
+	end
+
+	local LastEndPosition = Vector2.zero
+
+	local function SmoothStep(Alpha: number): number
+		local Clamped = math.clamp(Alpha, 0, 1)
+		return Clamped * Clamped * (3 - 2 * Clamped)
+	end
+
+	local function ComputeHorizontalDirectionFactor(DeltaX: number, SmoothRangePixels: number): number
+		if SmoothRangePixels <= 0 then
+			return if DeltaX >= 0 then 1 else -1
+		end
+
+		local Normalized = (DeltaX / SmoothRangePixels)
+		local Alpha = (math.clamp(Normalized, -1, 1) + 1) * 0.5
+		local Smoothed = SmoothStep(Alpha)
+		return (Smoothed * 2) - 1
+	end
+
+	local function GetSnappedColor(): Color3
+		return WireColor:Lerp(SNAPPED_COLOR, SNAPPED_COLOR_BLEND)
+	end
+
 	local function ComputeGradientColor(SegmentIndex: number, SegmentCount: number): Color3
 		if not IsPreviewWire then
 			return WireColor
+		end
+
+		if IsSnapped then
+			return GetSnappedColor()
 		end
 
 		if SegmentCount <= 1 then
@@ -119,6 +201,10 @@ function Wire.Create(Config: WireConfig): WireInstance
 	end
 
 	local function ComputeFadeTransparency(SegmentIndex: number, SegmentCount: number): number
+		if IsSnapped then
+			return 0
+		end
+
 		if not FadeEnabled then
 			return 0
 		end
@@ -149,6 +235,8 @@ function Wire.Create(Config: WireConfig): WireInstance
 
 			if ShouldApplyGradient then
 				Segment.BackgroundColor3 = ComputeGradientColor(SegmentIndex, SegmentCount)
+			elseif IsSnapped then
+				Segment.BackgroundColor3 = GetSnappedColor()
 			else
 				Segment.BackgroundColor3 = WireColor
 			end
@@ -255,7 +343,15 @@ function Wire.Create(Config: WireConfig): WireInstance
 		return 1
 	end
 
+	local function UpdatePlusPosition(CanvasEndPosition: Vector2)
+		if PlusIndicator then
+			PlusIndicator.Position = UDim2.fromOffset(CanvasEndPosition.X, CanvasEndPosition.Y)
+		end
+	end
+
 	local function RenderBezier(P0: Vector2, P3: Vector2)
+		LastEndPosition = P3
+
 		local Delta = P3 - P0
 		local Distance = Delta.Magnitude
 
@@ -269,7 +365,8 @@ function Wire.Create(Config: WireConfig): WireInstance
 		Normalized = math.clamp(Normalized, 0, 1)
 
 		local MaxCurvature = WIRE_CURVATURE
-		local ControlOffset = MaxCurvature * Normalized
+		local HorizontalDirectionFactor = ComputeHorizontalDirectionFactor(Delta.X, CURVE_DIRECTION_SMOOTH_RANGE_PIXELS)
+		local ControlOffset = if IsPreviewWire then MaxCurvature * Normalized * HorizontalDirectionFactor else MaxCurvature * Normalized
 
 		local CurvatureFactor = 0
 		if MaxCurvature > 0 then
@@ -301,6 +398,7 @@ function Wire.Create(Config: WireConfig): WireInstance
 		end
 
 		ApplyFade(SegmentCount)
+		UpdatePlusPosition(P3)
 	end
 
 	local function UpdateWire()
@@ -321,23 +419,23 @@ function Wire.Create(Config: WireConfig): WireInstance
 
 	UpdateWire()
 
-	local Instance: WireInstance = {
+	local WireInstance: WireInstance = {
 		Frame = Container,
 		WireId = Config.WireId,
 		WireType = Config.WireType,
 	} :: any
 
-	function Instance.SetPositions(NewStartPosition: Vector2, NewEndPosition: Vector2)
+	function WireInstance.SetPositions(NewStartPosition: Vector2, NewEndPosition: Vector2)
 		StartPosition = NewStartPosition
 		EndPosition = NewEndPosition
 		UpdateWire()
 	end
 
-	function Instance.SetCanvasPositions(CanvasStart: Vector2, CanvasEnd: Vector2)
+	function WireInstance.SetCanvasPositions(CanvasStart: Vector2, CanvasEnd: Vector2)
 		RenderBezier(CanvasStart, CanvasEnd)
 	end
 
-	function Instance.SetHighlighted(Highlighted: boolean)
+	function WireInstance.SetHighlighted(Highlighted: boolean)
 		IsHighlighted = Highlighted
 		local NewThickness = if Highlighted then Theme.Sizes.WireThicknessHover else Theme.Sizes.WireThickness
 		local NewColor = if Highlighted then Theme.Colors.BorderFocus else WireColor
@@ -351,7 +449,7 @@ function Wire.Create(Config: WireConfig): WireInstance
 		ApplyFade(ActiveSegmentCount)
 	end
 
-	function Instance.SetSelected(Selected: boolean)
+	function WireInstance.SetSelected(Selected: boolean)
 		IsSelected = Selected
 		local NewColor = if Selected then Theme.Colors.Primary else WireColor
 
@@ -362,24 +460,57 @@ function Wire.Create(Config: WireConfig): WireInstance
 		ApplyFade(ActiveSegmentCount)
 	end
 
-	function Instance.Destroy()
+	function WireInstance.SetSnapped(Snapped: boolean)
+		if IsSnapped == Snapped then
+			return
+		end
+
+		IsSnapped = Snapped
+
+		if PlusIndicator then
+			PlusIndicator.Visible = not Snapped
+		end
+
+		ApplyFade(ActiveSegmentCount)
+	end
+
+	function WireInstance.SetPlusIndicatorVisible(Visible: boolean)
+		if PlusIndicator then
+			if IsSnapped then
+				PlusIndicator.Visible = false
+			else
+				PlusIndicator.Visible = Visible
+			end
+		end
+	end
+
+	function WireInstance.Destroy()
 		for _, Segment in Segments do
 			Segment:Destroy()
 		end
 		table.clear(Segments)
 		table.clear(ClickDetectors)
+
+		if PlusIndicator then
+			PlusIndicator:Destroy()
+		end
+
 		Container:Destroy()
 	end
 
-	return Instance
+	return WireInstance
 end
 
 function Wire.CreatePreview(Parent: GuiObject, WireType: Types.PortType): WireInstance
-	return Wire.Create({
+	local PreviewWire = Wire.Create({
 		WireId = "Preview",
 		WireType = WireType,
 		Parent = Parent,
 	})
+
+	PreviewWire.SetPlusIndicatorVisible(true)
+
+	return PreviewWire
 end
 
 return Wire

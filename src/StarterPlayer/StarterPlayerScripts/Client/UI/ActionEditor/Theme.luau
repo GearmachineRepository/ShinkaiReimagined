@@ -61,6 +61,9 @@ Theme.Colors = {
 
 	BranchHeader = Color3.fromRGB(50, 50, 60),
 	BranchHeaderEntry = Color3.fromRGB(60, 80, 60),
+
+	SnapHighlight = Color3.fromRGB(140, 200, 255),
+	WireSnapped = Color3.fromRGB(220, 240, 255),
 }
 
 Theme.Sizes = {
@@ -109,6 +112,7 @@ Theme.Fonts = {
 }
 
 Theme.TextSizes = {
+	Tiny = 10,
 	Small = 12,
 	Default = 14,
 	Large = 16,

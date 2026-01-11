@@ -27,6 +27,7 @@ export type PropertyPanelInstance = {
 	Frame: Frame,
 	SetNode: (NodeData: Types.NodeInstance?) -> (),
 	SetComment: (CommentData: Types.CommentData?) -> (),
+	RefreshProperty: (Key: string, Value: any) -> (),
 	Refresh: () -> (),
 	Destroy: () -> (),
 }
@@ -490,6 +491,17 @@ function PropertyPanel.Create(Config: PropertyPanelConfig): PropertyPanelInstanc
 	local PanelInstance: PropertyPanelInstance = {
 		Frame = Container,
 	} :: any
+
+	function PanelInstance.RefreshProperty(Key: string, Value: any)
+		for _, Input in PropertyInputs do
+			if Input.Key == Key then
+				if Input.SetValue then
+					Input.SetValue(Value)
+				end
+				break
+			end
+		end
+	end
 
 	function PanelInstance.SetNode(NodeData: Types.NodeInstance?)
 		CurrentNode = NodeData

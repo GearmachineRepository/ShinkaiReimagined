@@ -17,7 +17,9 @@ function NodeFactory.CreateFromBlock(Block: Types.NodeInstance, Callbacks: {
 	OnMoved: ((NodeId: string, Position: Vector2) -> ())?,
 	OnPortConnectionStart: ((NodeId: string, PortName: string, PortType: Types.PortType, Direction: Types.PortDirection) -> ())?,
 	OnPortConnectionEnd: ((NodeId: string, PortName: string) -> ())?,
+	OnPropertyChanged: ((NodeId: string, Key: string, Value: any) -> ())?,
 	Parent: GuiObject?,
+	WiredInputs: { [string]: boolean }?,
 }): Node.NodeInstance?
 	local Definition = NodeRegistry.Get(Block.BlockType)
 	if not Definition then
@@ -36,11 +38,15 @@ function NodeFactory.CreateFromBlock(Block: Types.NodeInstance, Callbacks: {
 		Position = Block.Position,
 		InputPorts = InputPorts,
 		OutputPorts = OutputPorts,
+		Properties = Block.Properties,
+		PropertyDefinitions = Definition.Properties,
+		WiredInputs = Callbacks.WiredInputs,
 		Parent = Callbacks.Parent,
 		OnSelected = Callbacks.OnSelected,
 		OnMoved = Callbacks.OnMoved,
 		OnPortConnectionStart = Callbacks.OnPortConnectionStart,
 		OnPortConnectionEnd = Callbacks.OnPortConnectionEnd,
+		OnPropertyChanged = Callbacks.OnPropertyChanged,
 	})
 
 	return NodeInstance

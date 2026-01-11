@@ -147,6 +147,15 @@ function NodeManager.SetProperty(NodeId: string, Key: string, Value: any): boole
 	return true
 end
 
+function NodeManager.GetProperty(NodeId: string, Key: string): any
+	local NodeData = NodeManager.GetById(NodeId)
+	if not NodeData then
+		return nil
+	end
+
+	return NodeData.Properties[Key]
+end
+
 function NodeManager.GetById(NodeId: string): Types.NodeInstance?
 	local Branch = BranchManager.GetCurrent()
 	if not Branch then

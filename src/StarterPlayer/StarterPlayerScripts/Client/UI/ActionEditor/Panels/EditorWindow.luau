@@ -22,6 +22,7 @@ local BranchManager = require(script.Parent.Parent.State.BranchManager)
 local NodeManager = require(script.Parent.Parent.State.NodeManager)
 local WireManager = require(script.Parent.Parent.State.WireManager)
 local CommentManager = require(script.Parent.Parent.State.CommentManager)
+local WireSnapDetector = require(script.Parent.Parent.State.WireSnapDetector)
 local ActionSerializer = require(script.Parent.Parent.Serialization.ActionSerializer)
 
 local EditorWindow = {}
@@ -56,6 +57,8 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 	local EditorConnections: { RBXScriptConnection } = {}
 	local ManagerConnections: { any } = {}
 
+	local NodeZOrderCounter = 0
+
 	local Container = Instance.new("Frame")
 	Container.Name = "ActionEditor"
 	Container.Size = UDim2.fromScale(1, 1)
@@ -79,6 +82,44 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 	local CanvasInstance: Canvas.CanvasInstance = nil :: any
 
 	local EditorInstance: EditorWindowInstance = nil :: any
+
+	local function CollectAllPortData(): { {
+		NodeId: string,
+		PortName: string,
+		PortType: Types.PortType,
+		Direction: Types.PortDirection,
+		WorldPosition: Vector2,
+	} }
+		local PortDataList = {}
+
+		for NodeId, NodeUI in NodeInstances do
+			local AllPorts = NodeUI.GetAllPorts()
+			for PortName, PortAccessor in AllPorts do
+				table.insert(PortDataList, {
+					NodeId = NodeId,
+					PortName = PortName,
+					PortType = PortAccessor.PortType,
+					Direction = PortAccessor.Direction,
+					WorldPosition = PortAccessor.GetWorldPosition(),
+				})
+			end
+		end
+
+		return PortDataList
+	end
+
+	local function GetWiredInputsForNode(NodeId: string): { [string]: boolean }
+		local WiredInputs: { [string]: boolean } = {}
+		local Wires = WireManager.GetByNode(NodeId)
+
+		for _, WireData in Wires do
+			if WireData.ToNodeId == NodeId then
+				WiredInputs[WireData.ToPortName] = true
+			end
+		end
+
+		return WiredInputs
+	end
 
 	local function UpdatePreviewWire()
 		if not PreviewWire then
@@ -105,7 +146,25 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		local GuiInset = GuiService:GetGuiInset()
 		MousePosition = MousePosition - GuiInset
 
-		PreviewWire.SetPositions(StartPos, MousePosition)
+		local PortDataList = CollectAllPortData()
+
+		local SnapTarget = WireSnapDetector.FindNearestCompatiblePort(
+			MousePosition,
+			ConnectionState.FromNodeId,
+			ConnectionState.FromPortType :: Types.PortType,
+			ConnectionState.FromDirection :: Types.PortDirection,
+			PortDataList
+		)
+
+		WireSnapDetector.UpdateSnapState(SnapTarget)
+
+		local EndPos = MousePosition
+		if SnapTarget then
+			EndPos = SnapTarget.WorldPosition
+		end
+
+		PreviewWire.SetSnapped(SnapTarget ~= nil)
+		PreviewWire.SetPositions(StartPos, EndPos)
 	end
 
 	local function ClearPreviewWire()
@@ -113,6 +172,7 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 			PreviewWire.Destroy()
 			PreviewWire = nil
 		end
+		WireSnapDetector.ClearSnapState()
 	end
 
 	local function UpdateWirePositions()
@@ -142,9 +202,20 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		end)
 	end
 
+	local function BringNodeToFront(NodeId: string)
+		NodeZOrderCounter = NodeZOrderCounter + 1
+		local NodeUI = NodeInstances[NodeId]
+		if NodeUI and NodeUI.SetZOrder then
+			NodeUI.SetZOrder(NodeZOrderCounter)
+		end
+	end
+
 	local function CreateNodeUI(NodeData: Types.NodeInstance)
+		local WiredInputs = GetWiredInputsForNode(NodeData.NodeId)
+
 		local NodeUI = NodeFactory.CreateFromBlock(NodeData, {
 			Parent = CanvasInstance.Content,
+			WiredInputs = WiredInputs,
 			OnSelected = function(NodeId: string)
 				NodeManager.Select(NodeId)
 			end,
@@ -156,6 +227,9 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 			end,
 			OnPortConnectionEnd = function(NodeId: string, PortName: string)
 				WireManager.EndConnection(NodeId, PortName)
+			end,
+			OnPropertyChanged = function(NodeId: string, Key: string, Value: any)
+				NodeManager.SetProperty(NodeId, Key, Value)
 			end,
 		})
 
@@ -228,6 +302,7 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		ClearPreviewWire()
 		NodeManager.ResetSpawnCounter()
 		CommentManager.ResetSpawnCounter()
+		NodeZOrderCounter = 0
 	end
 
 	local function RenderCurrentBranch()
@@ -284,7 +359,6 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		OnSave = function()
 			if Config.OnSave then
 				local ActionData = ActionSerializer.Export(EditorState.Get())
-				print(ActionData)
 				local Success = Config.OnSave(ActionData)
 				if Success ~= false then
 					EditorState.ClearDirty()
@@ -296,18 +370,21 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		end,
 		OnLoad = function()
 			local function ShowLoadModal()
-				local ActionsList = if Config.GetActionsList then Config.GetActionsList() else {}
+				if not Config.GetActionsList or not Config.OnLoad then
+					return
+				end
 
+				local Actions = Config.GetActionsList()
 				Modal.Select({
 					Title = "Load Action",
-					Options = ActionsList,
+					Options = Actions,
 					Parent = Container,
-					OnSelected = function(ActionId: string)
+					OnSelect = function(Option: { Id: string, Name: string })
 						if Config.OnLoad then
-							local LoadedData = Config.OnLoad(ActionId)
-							if LoadedData then
-								EditorInstance.LoadAction(LoadedData)
-								Notification.Success("Action loaded!", Container)
+							local ActionData = Config.OnLoad(Option.Id)
+							if ActionData then
+								EditorInstance.LoadAction(ActionData)
+								Notification.Success("Action loaded successfully!", Container)
 							else
 								Notification.Error("Failed to load Action.", Container)
 							end
@@ -449,6 +526,7 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		end
 
 		if NodeId and NodeInstances[NodeId] then
+			BringNodeToFront(NodeId)
 			NodeInstances[NodeId].SetSelected(true)
 			local NodeData = NodeManager.GetById(NodeId)
 			PropertiesPanel.SetNode(NodeData)
@@ -496,12 +574,36 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		UpdateWirePositions()
 	end))
 
+	table.insert(ManagerConnections, NodeManager.NodePropertyChanged:Connect(function(NodeId: string, Key: string, Value: any)
+		local NodeUI = NodeInstances[NodeId]
+		if NodeUI and NodeUI.SetPropertyValue then
+			NodeUI.SetPropertyValue(Key, Value)
+		end
+
+		local SelectedNodeId = EditorState.GetSelectedNodeId()
+		if NodeId == SelectedNodeId then
+			PropertiesPanel.RefreshProperty(Key, Value)
+		end
+	end))
+
 	table.insert(ManagerConnections, WireManager.WireCreated:Connect(function(WireData: Types.WireInstance)
 		CreateWireUI(WireData)
 		UpdateWirePositions()
+
+		local ToNodeUI = NodeInstances[WireData.ToNodeId]
+		if ToNodeUI and ToNodeUI.SetPortWired then
+			ToNodeUI.SetPortWired(WireData.ToPortName, true)
+		end
 	end))
 
-	table.insert(ManagerConnections, WireManager.WireDeleted:Connect(function(WireId: string)
+	table.insert(ManagerConnections, WireManager.WireDeleted:Connect(function(WireId: string, WireData: Types.WireInstance?)
+		if WireData then
+			local ToNodeUI = NodeInstances[WireData.ToNodeId]
+			if ToNodeUI and ToNodeUI.SetPortWired then
+				ToNodeUI.SetPortWired(WireData.ToPortName, false)
+			end
+		end
+
 		local WireUI = WireInstances[WireId]
 		if WireUI then
 			WireUI.Destroy()
@@ -520,6 +622,25 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 
 	table.insert(ManagerConnections, WireManager.ConnectionEnded:Connect(function()
 		ClearPreviewWire()
+	end))
+
+	table.insert(ManagerConnections, WireSnapDetector.SnapChanged:Connect(function(SnapState)
+		for _, NodeUI in NodeInstances do
+			local AllPorts = NodeUI.GetAllPorts()
+			for _, PortAccessor in AllPorts do
+				PortAccessor.SetHighlighted(false)
+			end
+		end
+
+		if SnapState.IsSnapped and SnapState.Target then
+			local TargetNodeUI = NodeInstances[SnapState.Target.NodeId]
+			if TargetNodeUI then
+				local TargetPort = TargetNodeUI.GetPort(SnapState.Target.PortName)
+				if TargetPort then
+					TargetPort.SetHighlighted(true)
+				end
+			end
+		end
 	end))
 
 	table.insert(ManagerConnections, CommentManager.CommentAdded:Connect(function(CommentData: Types.CommentData)
@@ -556,7 +677,33 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 	table.insert(EditorConnections, UserInputService.InputEnded:Connect(function(Input: InputObject)
 		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
 			if WireManager.IsConnecting() then
-				WireManager.CancelConnection()
+				local ConnectionState = WireManager.GetConnectionState()
+
+				if ConnectionState.FromNodeId and ConnectionState.FromPortName then
+					local MousePosition = UserInputService:GetMouseLocation()
+					local GuiInset = GuiService:GetGuiInset()
+					MousePosition = MousePosition - GuiInset
+
+					local PortDataList = CollectAllPortData()
+					local SnapTarget = WireSnapDetector.FindNearestCompatiblePort(
+						MousePosition,
+						ConnectionState.FromNodeId,
+						ConnectionState.FromPortType :: Types.PortType,
+						ConnectionState.FromDirection :: Types.PortDirection,
+						PortDataList
+					)
+
+					if SnapTarget then
+						WireManager.EndConnection(SnapTarget.NodeId, SnapTarget.PortName)
+					else
+						WireManager.CancelConnection()
+					end
+				else
+					WireManager.CancelConnection()
+				end
+
+				WireSnapDetector.ClearSnapState()
+				ClearPreviewWire()
 			end
 		end
 	end))

@@ -4,7 +4,7 @@ local UserInputService = game:GetService("UserInputService")
 
 local Theme = require(script.Parent.Parent.Theme)
 local Types = require(script.Parent.Parent.Types)
-local Port = require(script.Parent.Port)
+local NodeRow = require(script.Parent.NodeRow)
 
 local Node = {}
 
@@ -16,11 +16,24 @@ export type NodeConfig = {
 	Position: Vector2?,
 	InputPorts: { Types.PortDefinition },
 	OutputPorts: { Types.PortDefinition },
+	Properties: { [string]: any }?,
+	PropertyDefinitions: { Types.PropertyDefinition }?,
+	WiredInputs: { [string]: boolean }?,
 	Parent: GuiObject?,
 	OnSelected: ((NodeId: string) -> ())?,
 	OnMoved: ((NodeId: string, Position: Vector2) -> ())?,
 	OnPortConnectionStart: ((NodeId: string, PortName: string, PortType: Types.PortType, Direction: Types.PortDirection) -> ())?,
 	OnPortConnectionEnd: ((NodeId: string, PortName: string) -> ())?,
+	OnPropertyChanged: ((NodeId: string, Key: string, Value: any) -> ())?,
+}
+
+export type PortAccessor = {
+	GetWorldPosition: () -> Vector2,
+	NodeId: string,
+	PortName: string,
+	Direction: Types.PortDirection,
+	PortType: Types.PortType,
+	SetHighlighted: (Highlighted: boolean) -> (),
 }
 
 export type NodeInstance = {
@@ -30,21 +43,64 @@ export type NodeInstance = {
 	GetPosition: () -> Vector2,
 	SetPosition: (Position: Vector2) -> (),
 	SetSelected: (Selected: boolean) -> (),
-	GetPort: (PortName: string) -> Port.PortInstance?,
-	GetAllPorts: () -> { [string]: Port.PortInstance },
+	SetZOrder: (Order: number) -> (),
+	GetPort: (PortName: string) -> PortAccessor?,
+	GetAllPorts: () -> { [string]: PortAccessor },
+	SetPortWired: (PortName: string, Wired: boolean) -> (),
+	SetPropertyValue: (Key: string, Value: any) -> (),
 	Destroy: () -> (),
 }
 
 function Node.Create(Config: NodeConfig): NodeInstance
 	local Position = Config.Position or Vector2.zero
-	local Ports: { [string]: Port.PortInstance } = {}
+	local Rows: { [string]: NodeRow.RowInstance } = {}
+	local PortToRow: { [string]: NodeRow.RowInstance } = {}
+	local PropertyToRow: { [string]: NodeRow.RowInstance } = {}
 	local IsSelected = false
+	local Connections: { RBXScriptConnection } = {}
 
-	local NodeHeight = Theme.Sizes.NodeHeaderHeight
+	local PortPropertyMap: { [string]: Types.PropertyDefinition } = {}
+	if Config.PropertyDefinitions then
+		for _, PortDef in Config.InputPorts do
+			if PortDef.PropertyKey then
+				for _, PropDef in Config.PropertyDefinitions do
+					if PropDef.Key == PortDef.PropertyKey then
+						PortPropertyMap[PortDef.Name] = PropDef
+						break
+					end
+				end
+			end
+		end
+	end
+
+	local PropertiesWithoutPort: { Types.PropertyDefinition } = {}
+	if Config.PropertyDefinitions then
+		for _, PropDef in Config.PropertyDefinitions do
+			local HasPort = false
+			for _, PortDef in Config.InputPorts do
+				if PortDef.PropertyKey == PropDef.Key then
+					HasPort = true
+					break
+				end
+			end
+			if not HasPort then
+				table.insert(PropertiesWithoutPort, PropDef)
+			end
+		end
+	end
+
 	local InputCount = #Config.InputPorts
 	local OutputCount = #Config.OutputPorts
-	local PortRows = math.max(InputCount, OutputCount)
-	NodeHeight = NodeHeight + (PortRows * Theme.Sizes.NodePortHeight) + 8
+	local StandalonePropertyCount = #PropertiesWithoutPort
+	local MaxPortRows = math.max(InputCount, OutputCount)
+
+	local ROW_HEIGHT = 22
+	local NodeHeight = Theme.Sizes.NodeHeaderHeight + 4
+	NodeHeight = NodeHeight + (MaxPortRows * ROW_HEIGHT)
+	if StandalonePropertyCount > 0 then
+		NodeHeight = NodeHeight + 4 + (StandalonePropertyCount * ROW_HEIGHT)
+	end
+	NodeHeight = NodeHeight + 4
 
 	local Container = Instance.new("Frame")
 	Container.Name = "Node_" .. Config.NodeId
@@ -96,22 +152,13 @@ function Node.Create(Config: NodeConfig): NodeInstance
 	Title.ZIndex = Theme.ZIndex.NodeHeader
 	Title.Parent = Header
 
-	local BodyDragArea = Instance.new("Frame")
-	BodyDragArea.Name = "BodyDragArea"
-	BodyDragArea.Size = UDim2.new(1, -48, 1, -Theme.Sizes.NodeHeaderHeight)
-	BodyDragArea.Position = UDim2.fromOffset(24, Theme.Sizes.NodeHeaderHeight)
-	BodyDragArea.BackgroundTransparency = 1
-	BodyDragArea.ZIndex = Theme.ZIndex.NodeContent
-	BodyDragArea.Active = false
-	BodyDragArea.Parent = Container
-
 	local InputContainer = Instance.new("Frame")
 	InputContainer.Name = "Inputs"
-	InputContainer.Size = UDim2.new(0.5, 0, 1, -Theme.Sizes.NodeHeaderHeight)
-	InputContainer.Position = UDim2.fromOffset(0, Theme.Sizes.NodeHeaderHeight)
+	InputContainer.Size = UDim2.new(0.5, 0, 0, MaxPortRows * ROW_HEIGHT)
+	InputContainer.Position = UDim2.fromOffset(0, Theme.Sizes.NodeHeaderHeight + 2)
 	InputContainer.BackgroundTransparency = 1
 	InputContainer.ZIndex = Theme.ZIndex.NodeContent
-	InputContainer.Active = false
+	InputContainer.ClipsDescendants = false
 	InputContainer.Parent = Container
 
 	local InputLayout = Instance.new("UIListLayout")
@@ -122,11 +169,11 @@ function Node.Create(Config: NodeConfig): NodeInstance
 
 	local OutputContainer = Instance.new("Frame")
 	OutputContainer.Name = "Outputs"
-	OutputContainer.Size = UDim2.new(0.5, 0, 1, -Theme.Sizes.NodeHeaderHeight)
-	OutputContainer.Position = UDim2.new(0.5, 0, 0, Theme.Sizes.NodeHeaderHeight)
+	OutputContainer.Size = UDim2.new(0.5, 0, 0, MaxPortRows * ROW_HEIGHT)
+	OutputContainer.Position = UDim2.new(0.5, 0, 0, Theme.Sizes.NodeHeaderHeight + 2)
 	OutputContainer.BackgroundTransparency = 1
 	OutputContainer.ZIndex = Theme.ZIndex.NodeContent
-	OutputContainer.Active = false
+	OutputContainer.ClipsDescendants = false
 	OutputContainer.Parent = Container
 
 	local OutputLayout = Instance.new("UIListLayout")
@@ -137,57 +184,119 @@ function Node.Create(Config: NodeConfig): NodeInstance
 	OutputLayout.Parent = OutputContainer
 
 	for Index, PortDef in Config.InputPorts do
-		local PortInstance = Port.Create({
-			Name = PortDef.Name,
-			Direction = "Input",
-			PortType = PortDef.PortType,
+		local PropDef = PortPropertyMap[PortDef.Name]
+		local PropValue = nil
+		if PropDef and Config.Properties then
+			PropValue = Config.Properties[PropDef.Key]
+			if PropValue == nil then
+				PropValue = PropDef.Default
+			end
+		end
+
+		local IsWired = Config.WiredInputs and Config.WiredInputs[PortDef.Name] or false
+
+		local Row = NodeRow.Create({
+			RowType = "InputPort",
 			NodeId = Config.NodeId,
+			PortName = PortDef.Name,
+			PortType = PortDef.PortType,
+			PropertyDef = PropDef,
+			PropertyValue = PropValue,
+			IsWired = IsWired,
 			Parent = InputContainer,
-			OnConnectionStart = function()
-				if Config.OnPortConnectionStart then
-					Config.OnPortConnectionStart(Config.NodeId, PortDef.Name, PortDef.PortType, "Input")
-				end
-			end,
-			OnConnectionEnd = function()
-				if Config.OnPortConnectionEnd then
-					Config.OnPortConnectionEnd(Config.NodeId, PortDef.Name)
+			ZIndex = Theme.ZIndex.NodeContent,
+			OnConnectionStart = Config.OnPortConnectionStart,
+			OnConnectionEnd = Config.OnPortConnectionEnd,
+			OnPropertyChanged = function(Key: string, Value: any)
+				if Config.OnPropertyChanged then
+					Config.OnPropertyChanged(Config.NodeId, Key, Value)
 				end
 			end,
 		})
-		PortInstance.Frame.LayoutOrder = Index
-		Ports[PortDef.Name] = PortInstance
+		Row.Frame.LayoutOrder = Index
+
+		local RowKey = "input_" .. PortDef.Name
+		Rows[RowKey] = Row
+		PortToRow[PortDef.Name] = Row
+
+		if PropDef then
+			PropertyToRow[PropDef.Key] = Row
+		end
 	end
 
 	for Index, PortDef in Config.OutputPorts do
-		local PortInstance = Port.Create({
-			Name = PortDef.Name,
-			Direction = "Output",
-			PortType = PortDef.PortType,
+		local Row = NodeRow.Create({
+			RowType = "OutputPort",
 			NodeId = Config.NodeId,
+			PortName = PortDef.Name,
+			PortType = PortDef.PortType,
 			Parent = OutputContainer,
-			OnConnectionStart = function()
-				if Config.OnPortConnectionStart then
-					Config.OnPortConnectionStart(Config.NodeId, PortDef.Name, PortDef.PortType, "Output")
-				end
-			end,
-			OnConnectionEnd = function()
-				if Config.OnPortConnectionEnd then
-					Config.OnPortConnectionEnd(Config.NodeId, PortDef.Name)
-				end
-			end,
+			ZIndex = Theme.ZIndex.NodeContent,
+			OnConnectionStart = Config.OnPortConnectionStart,
+			OnConnectionEnd = Config.OnPortConnectionEnd,
 		})
-		PortInstance.Frame.LayoutOrder = Index
-		Ports[PortDef.Name] = PortInstance
+		Row.Frame.LayoutOrder = Index
+
+		local RowKey = "output_" .. PortDef.Name
+		Rows[RowKey] = Row
+		PortToRow[PortDef.Name] = Row
+	end
+
+	local PropertyContainer: Frame? = nil
+	if StandalonePropertyCount > 0 then
+		PropertyContainer = Instance.new("Frame")
+		PropertyContainer.Name = "Properties"
+		PropertyContainer.Size = UDim2.new(1, -8, 0, StandalonePropertyCount * ROW_HEIGHT)
+		PropertyContainer.Position = UDim2.fromOffset(4, Theme.Sizes.NodeHeaderHeight + 2 + (MaxPortRows * ROW_HEIGHT) + 4)
+		PropertyContainer.BackgroundTransparency = 1
+		PropertyContainer.ZIndex = Theme.ZIndex.NodeContent
+		PropertyContainer.ClipsDescendants = false
+		PropertyContainer.Parent = Container
+
+		local PropLayout = Instance.new("UIListLayout")
+		PropLayout.FillDirection = Enum.FillDirection.Vertical
+		PropLayout.Padding = UDim.new(0, 0)
+		PropLayout.VerticalAlignment = Enum.VerticalAlignment.Top
+		PropLayout.Parent = PropertyContainer
+
+		for Index, PropDef in PropertiesWithoutPort do
+			local PropValue = nil
+			if Config.Properties then
+				PropValue = Config.Properties[PropDef.Key]
+				if PropValue == nil then
+					PropValue = PropDef.Default
+				end
+			end
+
+			local Row = NodeRow.Create({
+				RowType = "PropertyOnly",
+				NodeId = Config.NodeId,
+				PropertyDef = PropDef,
+				PropertyValue = PropValue,
+				Parent = PropertyContainer,
+				ZIndex = Theme.ZIndex.NodeContent,
+				OnPropertyChanged = function(Key: string, Value: any)
+					if Config.OnPropertyChanged then
+						Config.OnPropertyChanged(Config.NodeId, Key, Value)
+					end
+				end,
+			})
+			Row.Frame.LayoutOrder = Index
+
+			local RowKey = "prop_" .. PropDef.Key
+			Rows[RowKey] = Row
+			PropertyToRow[PropDef.Key] = Row
+		end
 	end
 
 	if Config.Parent then
 		Container.Parent = Config.Parent
 	end
 
-	local Connections: { RBXScriptConnection } = {}
 	local IsDragging = false
 	local DragStartPosition = Vector2.zero
 	local DragStartMouse = Vector2.zero
+	local ZOrderOffset = 0
 
 	local function GetZoomScale(): number
 		local Parent = Container.Parent
@@ -205,28 +314,23 @@ function Node.Create(Config: NodeConfig): NodeInstance
 		local HeaderZ = if Selected then Theme.ZIndex.NodeSelectedHeader else Theme.ZIndex.NodeHeader
 		local ContentZ = if Selected then Theme.ZIndex.NodeSelectedContent else Theme.ZIndex.NodeContent
 
+		BaseZ = BaseZ + ZOrderOffset
+		HeaderZ = HeaderZ + ZOrderOffset
+		ContentZ = ContentZ + ZOrderOffset
+
 		Container.ZIndex = BaseZ
 		Header.ZIndex = HeaderZ
 		HeaderMask.ZIndex = HeaderZ
 		Title.ZIndex = HeaderZ
-		BodyDragArea.ZIndex = ContentZ
 		InputContainer.ZIndex = ContentZ
 		OutputContainer.ZIndex = ContentZ
 
-		for _, PortInst in Ports do
-			PortInst.Frame.ZIndex = ContentZ + 2
-			local Circle = PortInst.Frame:FindFirstChild("Circle")
-			if Circle and Circle:IsA("GuiObject") then
-				Circle.ZIndex = ContentZ + 2
-			end
-			local Label = PortInst.Frame:FindFirstChild("Label")
-			if Label and Label:IsA("GuiObject") then
-				Label.ZIndex = ContentZ + 2
-			end
-			local ClickDetector = PortInst.Frame:FindFirstChild("ClickDetector")
-			if ClickDetector and ClickDetector:IsA("GuiObject") then
-				ClickDetector.ZIndex = ContentZ + 3
-			end
+		if PropertyContainer then
+			PropertyContainer.ZIndex = ContentZ
+		end
+
+		for _, Row in Rows do
+			Row.SetZIndex(ContentZ)
 		end
 	end
 
@@ -239,15 +343,29 @@ function Node.Create(Config: NodeConfig): NodeInstance
 		end
 
 		local GuisAtPosition = PlayerGui:GetGuiObjectsAtPosition(ScreenPoint.X, ScreenPoint.Y)
+
 		for _, Gui in GuisAtPosition do
-			if Gui == Container or Gui:IsDescendantOf(Container) then
+			if Gui == Container then
 				return true
 			end
-			local GuiObject = Gui :: GuiObject
-			if GuiObject.Active and Gui:IsA("GuiObject") then
+
+			if Gui:IsDescendantOf(Container) then
+				if Gui:IsA("TextButton") or Gui:IsA("ImageButton") then
+					return false
+				end
+				continue
+			end
+
+			local GuiName = Gui.Name
+			if string.sub(GuiName, 1, 5) == "Node_" then
+				return false
+			end
+
+			if Gui:IsA("TextButton") or Gui:IsA("ImageButton") then
 				return false
 			end
 		end
+
 		return true
 	end
 
@@ -325,12 +443,69 @@ function Node.Create(Config: NodeConfig): NodeInstance
 		end
 	end
 
-	function NodeInstance.GetPort(PortName: string): Port.PortInstance?
-		return Ports[PortName]
+	function NodeInstance.SetZOrder(Order: number)
+		ZOrderOffset = Order * 10
+		UpdateZIndex(IsSelected)
 	end
 
-	function NodeInstance.GetAllPorts(): { [string]: Port.PortInstance }
-		return Ports
+	function NodeInstance.GetPort(PortName: string): PortAccessor?
+		local Row = PortToRow[PortName]
+		if Row and Row.GetWorldPosition then
+			local WorldPos = Row.GetWorldPosition()
+			if WorldPos then
+				return {
+					GetWorldPosition = function()
+						return Row.GetWorldPosition() :: Vector2
+					end,
+					NodeId = Config.NodeId,
+					PortName = PortName,
+					Direction = Row.Direction :: Types.PortDirection,
+					PortType = Row.PortType :: Types.PortType,
+					SetHighlighted = function(Highlighted: boolean)
+						Row.SetHighlighted(Highlighted)
+					end,
+				}
+			end
+		end
+		return nil
+	end
+
+	function NodeInstance.GetAllPorts(): { [string]: PortAccessor }
+		local Result: { [string]: PortAccessor } = {}
+		for PortName, Row in PortToRow do
+			if Row.GetWorldPosition then
+				local WorldPos = Row.GetWorldPosition()
+				if WorldPos then
+					Result[PortName] = {
+						GetWorldPosition = function()
+							return Row.GetWorldPosition() :: Vector2
+						end,
+						NodeId = Config.NodeId,
+						PortName = PortName,
+						Direction = Row.Direction :: Types.PortDirection,
+						PortType = Row.PortType :: Types.PortType,
+						SetHighlighted = function(Highlighted: boolean)
+							Row.SetHighlighted(Highlighted)
+						end,
+					}
+				end
+			end
+		end
+		return Result
+	end
+
+	function NodeInstance.SetPortWired(PortName: string, Wired: boolean)
+		local Row = PortToRow[PortName]
+		if Row then
+			Row.SetWired(Wired)
+		end
+	end
+
+	function NodeInstance.SetPropertyValue(Key: string, Value: any)
+		local Row = PropertyToRow[Key]
+		if Row then
+			Row.SetPropertyValue(Value)
+		end
 	end
 
 	function NodeInstance.Destroy()
@@ -339,10 +514,12 @@ function Node.Create(Config: NodeConfig): NodeInstance
 		end
 		table.clear(Connections)
 
-		for _, PortInstance in Ports do
-			PortInstance.Destroy()
+		for _, Row in Rows do
+			Row.Destroy()
 		end
-		table.clear(Ports)
+		table.clear(Rows)
+		table.clear(PortToRow)
+		table.clear(PropertyToRow)
 
 		Container:Destroy()
 	end
