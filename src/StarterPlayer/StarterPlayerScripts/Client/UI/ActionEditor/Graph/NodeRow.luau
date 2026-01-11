@@ -198,6 +198,7 @@ function NodeRow.Create(Config: RowConfig): RowInstance
 		NewWiredIndicator.ZIndex = CurrentZIndex + 1
 		NewWiredIndicator.Visible = false
 		NewWiredIndicator.Parent = ContentArea
+		WiredIndicator = NewWiredIndicator
 
 		if Config.PropertyDef and Config.OnPropertyChanged then
 			InlineControl = InlineControls.Create({
@@ -270,6 +271,7 @@ function NodeRow.Create(Config: RowConfig): RowInstance
 		NewLabel.TextTruncate = Enum.TextTruncate.AtEnd
 		NewLabel.ZIndex = CurrentZIndex + 1
 		NewLabel.Parent = ContentArea
+		Label = NewLabel
 	end
 
 	if Config.Parent then
