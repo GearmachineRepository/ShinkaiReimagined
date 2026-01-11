@@ -24,7 +24,7 @@ export type NodeDefinition = {
 	Properties: { PropertyDefinition },
 }
 
-export type PropertyType = "String" | "Number" | "Boolean" | "Dropdown" | "Vector3" | "AssetId"
+export type PropertyType = "String" | "Number" | "Boolean" | "Dropdown" | "Vector3" | "AssetId" | "BranchDropdown"
 
 export type PropertyDefinition = {
 	Key: string,

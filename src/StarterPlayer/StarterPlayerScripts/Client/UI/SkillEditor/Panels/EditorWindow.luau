@@ -1,6 +1,5 @@
 --!strict
 
-local HttpService = game:GetService("HttpService")
 local UserInputService = game:GetService("UserInputService")
 local GuiService = game:GetService("GuiService")
 
@@ -11,13 +10,19 @@ local Node = require(script.Parent.Parent.Graph.Node)
 local Wire = require(script.Parent.Parent.Graph.Wire)
 local Comment = require(script.Parent.Parent.Graph.Comment)
 local NodeFactory = require(script.Parent.Parent.Nodes.NodeFactory)
-local NodeRegistry = require(script.Parent.Parent.Nodes.NodeRegistry)
 local Toolbar = require(script.Parent.Toolbar)
 local NodePalette = require(script.Parent.NodePalette)
 local PropertyPanel = require(script.Parent.PropertyPanel)
 local BranchList = require(script.Parent.BranchList)
 local Modal = require(script.Parent.Parent.Components.Modal)
 local Notification = require(script.Parent.Parent.Components.Notification)
+
+local EditorState = require(script.Parent.Parent.State.EditorState)
+local BranchManager = require(script.Parent.Parent.State.BranchManager)
+local NodeManager = require(script.Parent.Parent.State.NodeManager)
+local WireManager = require(script.Parent.Parent.State.WireManager)
+local CommentManager = require(script.Parent.Parent.State.CommentManager)
+local SkillSerializer = require(script.Parent.Parent.Serialization.SkillSerializer)
 
 local EditorWindow = {}
 
@@ -40,39 +45,16 @@ export type EditorWindowInstance = {
 	Destroy: () -> (),
 }
 
-local NODE_SPAWN_OFFSET = 40
-
 function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
-	local State: Types.EditorState = {
-		SkillId = "",
-		DisplayName = "New Skill",
-		Branches = {},
-		SelectedNodeId = nil,
-		SelectedBranchId = nil,
-		SelectedWireId = nil,
-		SelectedCommentId = nil,
-		CanvasOffset = Vector2.zero,
-		CanvasZoom = 1,
-		IsDirty = false,
-	}
+	EditorState.Init()
 
 	local NodeInstances: { [string]: Node.NodeInstance } = {}
 	local WireInstances: { [string]: Wire.WireInstance } = {}
 	local CommentInstances: { [string]: Comment.CommentInstance } = {}
-	local ConnectionState: {
-		IsConnecting: boolean,
-		FromNodeId: string?,
-		FromPortName: string?,
-		FromPortType: Types.PortType?,
-		FromDirection: Types.PortDirection?,
-		PreviewWire: Wire.WireInstance?,
-	} = {
-		IsConnecting = false,
-	}
+	local PreviewWire: Wire.WireInstance? = nil
 
-	local SpawnCounter = 0
-
-	local EditorInstance: EditorWindowInstance = nil :: any
+	local EditorConnections: { RBXScriptConnection } = {}
+	local ManagerConnections: { any } = {}
 
 	local Container = Instance.new("Frame")
 	Container.Name = "SkillEditor"
@@ -96,94 +78,24 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 	local BranchListPanel: BranchList.BranchListInstance = nil :: any
 	local CanvasInstance: Canvas.CanvasInstance = nil :: any
 
-	local EditorConnections: { RBXScriptConnection } = {}
-
-	local function MarkDirty()
-		State.IsDirty = true
-		if ToolbarPanel then
-			ToolbarPanel.SetDirty(true)
-		end
-	end
-
-	local function GetCurrentBranch(): Types.BranchData?
-		if not State.SelectedBranchId then
-			return nil
-		end
-		return State.Branches[State.SelectedBranchId]
-	end
-
-	local function GetNodeData(NodeId: string): Types.NodeInstance?
-		local Branch = GetCurrentBranch()
-		if not Branch then
-			return nil
-		end
-		for _, NodeData in Branch.Nodes do
-			if NodeData.NodeId == NodeId then
-				return NodeData
-			end
-		end
-		return nil
-	end
-
-	local function UpdateWirePositions()
-		local Branch = GetCurrentBranch()
-		if not Branch then
-			return
-		end
-
-		task.defer(function()
-			for WireId, WireInstance in WireInstances do
-				local WireData: Types.WireInstance? = nil
-				for _, WireItem in Branch.Wires do
-					if WireItem.WireId == WireId then
-						WireData = WireItem
-						break
-					end
-				end
-
-				if not WireData then
-					continue
-				end
-
-				local FromNode = NodeInstances[WireData.FromNodeId]
-				local ToNode = NodeInstances[WireData.ToNodeId]
-
-				if not FromNode or not ToNode then
-					continue
-				end
-
-				local FromPort = FromNode.GetPort(WireData.FromPortName)
-				local ToPort = ToNode.GetPort(WireData.ToPortName)
-
-				if not FromPort or not ToPort then
-					continue
-				end
-
-				local StartPos = FromPort.GetWorldPosition()
-				local EndPos = ToPort.GetWorldPosition()
-
-				WireInstance.SetPositions(StartPos, EndPos)
-			end
-		end)
-	end
+	local EditorInstance: EditorWindowInstance = nil :: any
 
 	local function UpdatePreviewWire()
-		if not ConnectionState.IsConnecting or not ConnectionState.PreviewWire then
+		if not PreviewWire then
 			return
 		end
 
-		local FromNodeId = ConnectionState.FromNodeId
-		local FromPortName = ConnectionState.FromPortName
-		if not FromNodeId or not FromPortName then
+		local ConnectionState = WireManager.GetConnectionState()
+		if not ConnectionState.IsConnecting or not ConnectionState.FromNodeId then
 			return
 		end
 
-		local FromNode = NodeInstances[FromNodeId]
-		if not FromNode then
+		local FromNodeUI = NodeInstances[ConnectionState.FromNodeId]
+		if not FromNodeUI then
 			return
 		end
 
-		local FromPort = FromNode.GetPort(FromPortName)
+		local FromPort = FromNodeUI.GetPort(ConnectionState.FromPortName :: string)
 		if not FromPort then
 			return
 		end
@@ -193,149 +105,79 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		local GuiInset = GuiService:GetGuiInset()
 		MousePosition = MousePosition - GuiInset
 
-		ConnectionState.PreviewWire.SetPositions(StartPos, MousePosition)
+		PreviewWire.SetPositions(StartPos, MousePosition)
 	end
 
-	local function CancelConnection()
-		if ConnectionState.PreviewWire then
-			ConnectionState.PreviewWire.Destroy()
-		end
-		ConnectionState.IsConnecting = false
-		ConnectionState.FromNodeId = nil
-		ConnectionState.FromPortName = nil
-		ConnectionState.FromPortType = nil
-		ConnectionState.FromDirection = nil
-		ConnectionState.PreviewWire = nil
-	end
-
-	local function SelectComment(CommentId: string?)
-		if State.SelectedCommentId and CommentInstances[State.SelectedCommentId] then
-			CommentInstances[State.SelectedCommentId].SetSelected(false)
-		end
-
-		State.SelectedCommentId = CommentId
-
-		if CommentId and CommentInstances[CommentId] then
-			CommentInstances[CommentId].SetSelected(true)
+	local function ClearPreviewWire()
+		if PreviewWire then
+			PreviewWire.Destroy()
+			PreviewWire = nil
 		end
 	end
 
-	local function SelectNode(NodeId: string?)
-		if State.SelectedCommentId and CommentInstances[State.SelectedCommentId] then
-			CommentInstances[State.SelectedCommentId].SetSelected(false)
-			State.SelectedCommentId = nil
-		end
-
-		if State.SelectedNodeId and NodeInstances[State.SelectedNodeId] then
-			NodeInstances[State.SelectedNodeId].SetSelected(false)
-		end
-
-		State.SelectedNodeId = NodeId
-
-		if NodeId and NodeInstances[NodeId] then
-			NodeInstances[NodeId].SetSelected(true)
-			local NodeData = GetNodeData(NodeId)
-			PropertiesPanel.SetNode(NodeData)
-		else
-			PropertiesPanel.SetNode(nil)
-		end
-	end
-
-	local function DeleteWire(WireId: string)
-		local Branch = GetCurrentBranch()
-		if not Branch then
-			return
-		end
-
-		local WireUI = WireInstances[WireId]
-		if WireUI then
-			WireUI.Destroy()
-			WireInstances[WireId] = nil
-		end
-
-		for Index, WireData in Branch.Wires do
-			if WireData.WireId == WireId then
-				table.remove(Branch.Wires, Index)
-				break
-			end
-		end
-
-		MarkDirty()
-	end
-
-	local function DeleteNode(NodeId: string)
-		local Branch = GetCurrentBranch()
-		if not Branch then
-			return
-		end
-
-		local WiresToRemove: { string } = {}
-		for _, WireData in Branch.Wires do
-			if WireData.FromNodeId == NodeId or WireData.ToNodeId == NodeId then
-				table.insert(WiresToRemove, WireData.WireId)
-			end
-		end
-
-		for _, WireId in WiresToRemove do
-			local WireUI = WireInstances[WireId]
-			if WireUI then
-				WireUI.Destroy()
-				WireInstances[WireId] = nil
-			end
-
-			for Index, WireData in Branch.Wires do
-				if WireData.WireId == WireId then
-					table.remove(Branch.Wires, Index)
-					break
+	local function UpdateWirePositions()
+		task.defer(function()
+			for WireId, WireUI in WireInstances do
+				local WireData = WireManager.GetById(WireId)
+				if not WireData then
+					continue
 				end
+
+				local FromNodeUI = NodeInstances[WireData.FromNodeId]
+				local ToNodeUI = NodeInstances[WireData.ToNodeId]
+
+				if not FromNodeUI or not ToNodeUI then
+					continue
+				end
+
+				local FromPort = FromNodeUI.GetPort(WireData.FromPortName)
+				local ToPort = ToNodeUI.GetPort(WireData.ToPortName)
+
+				if not FromPort or not ToPort then
+					continue
+				end
+
+				WireUI.SetPositions(FromPort.GetWorldPosition(), ToPort.GetWorldPosition())
 			end
-		end
-
-		local NodeUI = NodeInstances[NodeId]
-		if NodeUI then
-			NodeUI.Destroy()
-			NodeInstances[NodeId] = nil
-		end
-
-		for Index, NodeData in Branch.Nodes do
-			if NodeData.NodeId == NodeId then
-				table.remove(Branch.Nodes, Index)
-				break
-			end
-		end
-
-		if State.SelectedNodeId == NodeId then
-			State.SelectedNodeId = nil
-			PropertiesPanel.SetNode(nil)
-		end
-
-		MarkDirty()
+		end)
 	end
 
-	local function DeleteComment(CommentId: string)
-		local Branch = GetCurrentBranch()
-		if not Branch or not Branch.Comments then
-			return
-		end
+	local function CreateNodeUI(NodeData: Types.NodeInstance)
+		local NodeUI = NodeFactory.CreateFromBlock(NodeData, {
+			Parent = CanvasInstance.Content,
+			OnSelected = function(NodeId: string)
+				NodeManager.Select(NodeId)
+			end,
+			OnMoved = function(NodeId: string, Position: Vector2)
+				NodeManager.Move(NodeId, Position)
+			end,
+			OnPortConnectionStart = function(NodeId: string, PortName: string, PortType: Types.PortType, Direction: Types.PortDirection)
+				WireManager.StartConnection(NodeId, PortName, PortType, Direction)
+			end,
+			OnPortConnectionEnd = function(NodeId: string, PortName: string)
+				WireManager.EndConnection(NodeId, PortName)
+			end,
+		})
 
-		local CommentUI = CommentInstances[CommentId]
-		if CommentUI then
-			CommentUI.Destroy()
-			CommentInstances[CommentId] = nil
+		if NodeUI then
+			NodeInstances[NodeData.NodeId] = NodeUI
 		end
+	end
 
-		for Index, CommentData in Branch.Comments do
-			if CommentData.CommentId == CommentId then
-				table.remove(Branch.Comments, Index)
-				break
-			end
-		end
+	local function CreateWireUI(WireData: Types.WireInstance)
+		local WireUI = Wire.Create({
+			WireId = WireData.WireId,
+			WireType = WireData.WireType,
+			Parent = CanvasInstance.Content,
+			OnClick = function(ClickedWireId: string)
+				WireManager.Delete(ClickedWireId)
+			end,
+			CanInteract = function()
+				return not WireManager.IsConnecting()
+			end,
+		})
 
-		if State.SelectedCommentId == CommentId then
-			State.SelectedCommentId = nil
-		end
-
-		MarkDirty()
+		WireInstances[WireData.WireId] = WireUI
 	end
 
 	local function CreateCommentUI(CommentData: Types.CommentData)
@@ -348,144 +190,23 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 			Size = CommentData.Size,
 			Parent = CanvasInstance.Content,
 			OnSelected = function(CommentId: string)
-				SelectNode(nil)
-				SelectComment(CommentId)
+				CommentManager.Select(CommentId)
 			end,
-			OnMoved = function(_CommentId: string, Position: Vector2)
-				CommentData.Position = Position
-				MarkDirty()
+			OnMoved = function(CommentId: string, Position: Vector2)
+				CommentManager.Move(CommentId, Position)
 			end,
-			OnResized = function(_CommentId: string, Size: Vector2)
-				CommentData.Size = Size
-				MarkDirty()
+			OnResized = function(CommentId: string, Size: Vector2)
+				CommentManager.Resize(CommentId, Size)
 			end,
-			OnTitleChanged = function(_CommentId: string, Title: string)
-				CommentData.Title = Title
-				MarkDirty()
+			OnTitleChanged = function(CommentId: string, Title: string)
+				CommentManager.SetTitle(CommentId, Title)
 			end,
-			OnTextChanged = function(_CommentId: string, Text: string)
-				CommentData.Text = Text
-				MarkDirty()
+			OnTextChanged = function(CommentId: string, Text: string)
+				CommentManager.SetText(CommentId, Text)
 			end,
 		})
 
 		CommentInstances[CommentData.CommentId] = CommentUI
-	end
-
-	local function CreateNodeUI(NodeData: Types.NodeInstance)
-		local NodeUI = NodeFactory.CreateFromBlock(NodeData, {
-			Parent = CanvasInstance.Content,
-			OnSelected = function(NodeId: string)
-				SelectNode(NodeId)
-			end,
-			OnMoved = function(_NodeId: string, Position: Vector2)
-				NodeData.Position = Position
-				UpdateWirePositions()
-				MarkDirty()
-			end,
-			OnPortConnectionStart = function(NodeId: string, PortName: string, PortType: Types.PortType, Direction: Types.PortDirection)
-				ConnectionState.IsConnecting = true
-				ConnectionState.FromNodeId = NodeId
-				ConnectionState.FromPortName = PortName
-				ConnectionState.FromPortType = PortType
-				ConnectionState.FromDirection = Direction
-				ConnectionState.PreviewWire = Wire.CreatePreview(CanvasInstance.Content, PortType)
-				UpdatePreviewWire()
-			end,
-			OnPortConnectionEnd = function(NodeId: string, PortName: string)
-				if not ConnectionState.IsConnecting then
-					return
-				end
-				if ConnectionState.FromNodeId == NodeId then
-					CancelConnection()
-					return
-				end
-
-				local Branch = GetCurrentBranch()
-				if not Branch then
-					CancelConnection()
-					return
-				end
-
-				local ToNodeData = GetNodeData(NodeId)
-				if not ToNodeData then
-					CancelConnection()
-					return
-				end
-
-				local ToPortDirection: Types.PortDirection? = nil
-				local ToPortType: Types.PortType? = nil
-				local ToDefinition = NodeRegistry.Get(ToNodeData.BlockType)
-				if ToDefinition then
-					for _, PortDef in ToDefinition.Ports do
-						if PortDef.Name == PortName then
-							ToPortDirection = PortDef.Direction
-							ToPortType = PortDef.PortType
-							break
-						end
-					end
-				end
-
-				if not ToPortDirection then
-					CancelConnection()
-					return
-				end
-
-				local FromDirection = ConnectionState.FromDirection
-				if FromDirection == ToPortDirection then
-					CancelConnection()
-					return
-				end
-
-				local FromPortType = ConnectionState.FromPortType
-				if FromPortType ~= ToPortType then
-					CancelConnection()
-					return
-				end
-
-				local FromNodeId = ConnectionState.FromNodeId :: string
-				local FromPortName = ConnectionState.FromPortName :: string
-				local ToNodeId = NodeId
-				local ToPortName = PortName
-
-				if FromDirection == "Input" then
-					FromNodeId, ToNodeId = ToNodeId, FromNodeId
-					FromPortName, ToPortName = ToPortName, FromPortName
-				end
-
-				local WireData: Types.WireInstance = {
-					WireId = HttpService:GenerateGUID(false),
-					FromNodeId = FromNodeId,
-					FromPortName = FromPortName,
-					ToNodeId = ToNodeId,
-					ToPortName = ToPortName,
-					WireType = ConnectionState.FromPortType :: Types.PortType,
-				}
-
-				table.insert(Branch.Wires, WireData)
-
-				local WireUI = Wire.Create({
-					WireId = WireData.WireId,
-					WireType = WireData.WireType,
-					Parent = CanvasInstance.Content,
-					OnClick = function(ClickedWireId: string)
-						DeleteWire(ClickedWireId)
-					end,
-					CanInteract = function()
-						return not ConnectionState.IsConnecting
-					end,
-				})
-				WireInstances[WireData.WireId] = WireUI
-
-				CancelConnection()
-				UpdateWirePositions()
-				MarkDirty()
-			end,
-		})
-
-		if NodeUI then
-			NodeInstances[NodeData.NodeId] = NodeUI
-		end
 	end
 
 	local function ClearCanvas()
@@ -504,15 +225,15 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		end
 		table.clear(CommentInstances)
 
-		SelectNode(nil)
-		SelectComment(nil)
-		SpawnCounter = 0
+		ClearPreviewWire()
+		NodeManager.ResetSpawnCounter()
+		CommentManager.ResetSpawnCounter()
 	end
 
-	local function RenderBranch(BranchId: string)
+	local function RenderCurrentBranch()
 		ClearCanvas()
 
-		local Branch = State.Branches[BranchId]
+		local Branch = BranchManager.GetCurrent()
 		if not Branch then
 			return
 		end
@@ -528,192 +249,14 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		end
 
 		for _, WireData in Branch.Wires do
-			local WireUI = Wire.Create({
-				WireId = WireData.WireId,
-				WireType = WireData.WireType,
-				Parent = CanvasInstance.Content,
-				OnClick = function(ClickedWireId: string)
-					DeleteWire(ClickedWireId)
-				end,
-				CanInteract = function()
-					return not ConnectionState.IsConnecting
-				end,
-			})
-			WireInstances[WireData.WireId] = WireUI
+			CreateWireUI(WireData)
 		end
 
 		UpdateWirePositions()
 	end
 
-	local function SelectBranch(BranchId: string)
-		State.SelectedBranchId = BranchId
-		BranchListPanel.SetSelectedBranch(BranchId)
-		RenderBranch(BranchId)
-	end
-
-	local function CreateBranch(BranchName: string): string
-		local BranchId = HttpService:GenerateGUID(false)
-		local IsEntry = next(State.Branches) == nil
-
-		local BranchData: Types.BranchData = {
-			BranchId = BranchId,
-			BranchName = BranchName,
-			IsEntry = IsEntry,
-			Nodes = {},
-			Wires = {},
-			Comments = {},
-			Position = Vector2.zero,
-			Collapsed = false,
-		}
-
-		State.Branches[BranchId] = BranchData
-		BranchListPanel.SetBranches(State.Branches)
-		MarkDirty()
-
-		return BranchId
-	end
-
-	local function DeleteBranch(BranchId: string)
-		if not State.Branches[BranchId] then
-			return
-		end
-
-		if State.SelectedBranchId == BranchId then
-			ClearCanvas()
-			State.SelectedBranchId = nil
-		end
-
-		State.Branches[BranchId] = nil
-		BranchListPanel.SetBranches(State.Branches)
-
-		local FirstBranchId: string? = nil
-		for Id in State.Branches do
-			FirstBranchId = Id
-			break
-		end
-
-		if FirstBranchId then
-			SelectBranch(FirstBranchId)
-		end
-
-		MarkDirty()
-	end
-
-	local function GetSpawnPosition(): Vector2
-		local CanvasCenter = CanvasInstance.CanvasToWorld(Vector2.new(
-			CanvasInstance.Frame.AbsoluteSize.X / 2,
-			CanvasInstance.Frame.AbsoluteSize.Y / 2
-		))
-
-		local OffsetX = (SpawnCounter % 5) * (Theme.Sizes.NodeWidth + NODE_SPAWN_OFFSET)
-		local OffsetY = math.floor(SpawnCounter / 5) * 100
-
-		SpawnCounter = SpawnCounter + 1
-
-		return CanvasCenter + Vector2.new(OffsetX - 200, OffsetY - 100)
-	end
-
-	local function AddComment()
-		local Branch = GetCurrentBranch()
-		if not Branch then
-			local BranchId = CreateBranch("Main")
-			SelectBranch(BranchId)
-			Branch = State.Branches[BranchId]
-		end
-		if not Branch then
-			return
-		end
-
-		local Comments = Branch.Comments or {}
-
-		local SpawnPosition = GetSpawnPosition()
-
-		local CommentData: Types.CommentData = {
-			CommentId = HttpService:GenerateGUID(false),
-			Title = "Comment",
-			Text = "",
-			Color = Comment.DefaultColor,
-			Position = SpawnPosition,
-			Size = Vector2.new(300, 150),
-		}
-
-		table.insert(Comments, CommentData)
-		CreateCommentUI(CommentData)
-		SelectNode(nil)
-		SelectComment(CommentData.CommentId)
-		MarkDirty()
-	end
-
-	local function AddNodeToBranch(BlockType: string)
-		if BlockType == "Comment" then
-			AddComment()
-			return
-		end
-
-		local Branch = GetCurrentBranch()
-		if not Branch then
-			local BranchId = CreateBranch("Main")
-			SelectBranch(BranchId)
-			Branch = State.Branches[BranchId]
-		end
-		if not Branch then
-			return
-		end
-
-		local SpawnPosition = GetSpawnPosition()
-		local NodeData = NodeFactory.CreateNodeInstance(BlockType, SpawnPosition)
-		table.insert(Branch.Nodes, NodeData)
-
-		CreateNodeUI(NodeData)
-		SelectNode(NodeData.NodeId)
-		MarkDirty()
-	end
-
-	local function OnPropertyChanged(NodeId: string, Key: string, Value: any)
-		local NodeData = GetNodeData(NodeId)
-		if NodeData then
-			NodeData.Properties[Key] = Value
-			MarkDirty()
-		end
-	end
-
-	local function OnNodeDelete(NodeId: string)
-		DeleteNode(NodeId)
-	end
-
-	table.insert(EditorConnections, UserInputService.InputChanged:Connect(function(Input: InputObject)
-		if Input.UserInputType == Enum.UserInputType.MouseMovement then
-			UpdatePreviewWire()
-		end
-	end))
-
-	table.insert(EditorConnections, UserInputService.InputEnded:Connect(function(Input: InputObject)
-		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-			if ConnectionState.IsConnecting then
-				CancelConnection()
-			end
-		end
-	end))
-
-	table.insert(EditorConnections, UserInputService.InputBegan:Connect(function(Input: InputObject, GameProcessed: boolean)
-		if GameProcessed then
-			return
-		end
-		if Input.KeyCode == Enum.KeyCode.Delete or Input.KeyCode == Enum.KeyCode.Backspace then
-			if State.SelectedCommentId then
-				DeleteComment(State.SelectedCommentId)
-			elseif State.SelectedNodeId then
-				DeleteNode(State.SelectedNodeId)
-			end
-		end
-	end))
-
 	local function ResetToNewSkill()
-		State.SkillId = ""
-		State.DisplayName = "New Skill"
-		State.Branches = {}
-		State.IsDirty = false
-		State.SelectedCommentId = nil
+		EditorState.Reset()
 		ToolbarPanel.SetSkillName("New Skill")
 		ToolbarPanel.SetDirty(false)
 		BranchListPanel.SetBranches({})
@@ -723,7 +266,7 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 	ToolbarPanel = Toolbar.Create({
 		Parent = Container,
 		OnNew = function()
-			if State.IsDirty then
+			if EditorState.IsDirty() then
 				Modal.Confirm({
 					Title = "Unsaved Changes",
 					Message = "You have unsaved changes. Are you sure you want to create a new skill?",
@@ -740,11 +283,10 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		end,
 		OnSave = function()
 			if Config.OnSave then
-				local SkillData = EditorWindow.ExportSkillData(State)
+				local SkillData = SkillSerializer.Export(EditorState.Get())
 				local Success = Config.OnSave(SkillData)
 				if Success ~= false then
-					State.IsDirty = false
-					ToolbarPanel.SetDirty(false)
+					EditorState.ClearDirty()
 					Notification.Success("Skill saved successfully!", Container)
 				else
 					Notification.Error("Failed to save skill.", Container)
@@ -773,7 +315,7 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 				})
 			end
 
-			if State.IsDirty then
+			if EditorState.IsDirty() then
 				Modal.Confirm({
 					Title = "Unsaved Changes",
 					Message = "You have unsaved changes. Are you sure you want to load a different skill?",
@@ -790,13 +332,12 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		end,
 		OnTest = function()
 			if Config.OnTest then
-				local SkillData = EditorWindow.ExportSkillData(State)
+				local SkillData = SkillSerializer.Export(EditorState.Get())
 				Config.OnTest(SkillData)
 			end
 		end,
 		OnNameChanged = function(Name: string)
-			State.DisplayName = Name
-			MarkDirty()
+			EditorState.SetDisplayName(Name)
 		end,
 	})
 	ToolbarPanel.Frame.Position = UDim2.new(0, 0, 0, 0)
@@ -815,94 +356,262 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		GridImage = if Theme.Assets.GridImage ~= "" then Theme.Assets.GridImage else nil,
 		Parent = ContentArea,
 		OnBackgroundClick = function()
-			SelectNode(nil)
-			SelectComment(nil)
-			CancelConnection()
+			EditorState.ClearSelection()
+			WireManager.CancelConnection()
 		end,
 	})
+
+	NodeManager.SetCanvasToWorldFunction(function(Pos: Vector2): Vector2
+		return CanvasInstance.CanvasToWorld(Pos)
+	end)
+	CommentManager.SetCanvasToWorldFunction(function(Pos: Vector2): Vector2
+		return CanvasInstance.CanvasToWorld(Pos)
+	end)
 
 	PalettePanel = NodePalette.Create({
 		Parent = ContentArea,
 		OnNodeSelected = function(BlockType: string)
-			AddNodeToBranch(BlockType)
+			if BlockType == "Comment" then
+				local CommentData = CommentManager.Add()
+				if CommentData then
+					CommentManager.Select(CommentData.CommentId)
+				end
+			else
+				local NodeData = NodeManager.Add(BlockType)
+				if NodeData then
+					NodeManager.Select(NodeData.NodeId)
+				end
+			end
 		end,
 	})
 
 	PropertiesPanel = PropertyPanel.Create({
 		Parent = ContentArea,
-		OnPropertyChanged = OnPropertyChanged,
-		OnNodeDelete = OnNodeDelete,
+		OnPropertyChanged = function(NodeId: string, Key: string, Value: any)
+			NodeManager.SetProperty(NodeId, Key, Value)
+		end,
+		OnNodeDelete = function(NodeId: string)
+			if NodeManager.CanDelete(NodeId) then
+				WireManager.DeleteByNode(NodeId)
+				NodeManager.Delete(NodeId)
+			else
+				Notification.Warning("Cannot delete Branch Start node.", Container)
+			end
+		end,
+		OnCommentPropertyChanged = function(CommentId: string, Key: string, Value: any)
+			if Key == "Title" then
+				CommentManager.SetTitle(CommentId, Value)
+			elseif Key == "Text" then
+				CommentManager.SetText(CommentId, Value)
+			elseif Key == "Color" then
+				CommentManager.SetColor(CommentId, Value)
+			end
+		end,
+		OnCommentDelete = function(CommentId: string)
+			CommentManager.Delete(CommentId)
+		end,
+		GetBranchOptions = function(): { string }
+			return BranchManager.GetBranchNames()
+		end,
 	})
 
 	BranchListPanel = BranchList.Create({
 		Parent = ContentArea,
 		OnBranchSelected = function(BranchId: string)
-			SelectBranch(BranchId)
+			BranchManager.Select(BranchId)
 		end,
 		OnBranchCreated = function(BranchName: string)
-			local BranchId = CreateBranch(BranchName)
-			SelectBranch(BranchId)
+			local BranchId = BranchManager.Create(BranchName)
+			BranchManager.Select(BranchId)
 		end,
 		OnBranchDeleted = function(BranchId: string)
-			DeleteBranch(BranchId)
+			BranchManager.Delete(BranchId)
+			BranchManager.SelectFirst()
 		end,
 		OnBranchRenamed = function(BranchId: string, NewName: string)
-			local Branch = State.Branches[BranchId]
-			if Branch then
-				Branch.BranchName = NewName
-				MarkDirty()
-			end
+			BranchManager.Rename(BranchId, NewName)
 		end,
 	})
+
+	table.insert(ManagerConnections, EditorState.DirtyChanged:Connect(function(IsDirty: boolean)
+		ToolbarPanel.SetDirty(IsDirty)
+	end))
+
+	table.insert(ManagerConnections, EditorState.BranchSelected:Connect(function(BranchId: string?)
+		BranchListPanel.SetSelectedBranch(BranchId)
+		RenderCurrentBranch()
+	end))
+
+	table.insert(ManagerConnections, EditorState.NodeSelected:Connect(function(NodeId: string?, OldNodeId: string?)
+		if OldNodeId and NodeInstances[OldNodeId] then
+			NodeInstances[OldNodeId].SetSelected(false)
+		end
+
+		if NodeId and NodeInstances[NodeId] then
+			NodeInstances[NodeId].SetSelected(true)
+			local NodeData = NodeManager.GetById(NodeId)
+			PropertiesPanel.SetNode(NodeData)
+		else
+			PropertiesPanel.SetNode(nil)
+		end
+	end))
+
+	table.insert(ManagerConnections, EditorState.CommentSelected:Connect(function(CommentId: string?, OldCommentId: string?)
+		if OldCommentId and CommentInstances[OldCommentId] then
+			CommentInstances[OldCommentId].SetSelected(false)
+		end
+
+		if CommentId and CommentInstances[CommentId] then
+			CommentInstances[CommentId].SetSelected(true)
+			local CommentData = CommentManager.GetById(CommentId)
+			PropertiesPanel.SetComment(CommentData)
+		else
+			PropertiesPanel.SetComment(nil)
+		end
+	end))
+
+	table.insert(ManagerConnections, EditorState.StateReset:Connect(function()
+		BranchListPanel.SetBranches(EditorState.GetBranches())
+		RenderCurrentBranch()
+	end))
+
+	table.insert(ManagerConnections, BranchManager.BranchListChanged:Connect(function(Branches)
+		BranchListPanel.SetBranches(Branches)
+	end))
+
+	table.insert(ManagerConnections, NodeManager.NodeAdded:Connect(function(NodeData: Types.NodeInstance)
+		CreateNodeUI(NodeData)
+	end))
+
+	table.insert(ManagerConnections, NodeManager.NodeDeleted:Connect(function(NodeId: string)
+		local NodeUI = NodeInstances[NodeId]
+		if NodeUI then
+			NodeUI.Destroy()
+			NodeInstances[NodeId] = nil
+		end
+	end))
+
+	table.insert(ManagerConnections, NodeManager.NodeMoved:Connect(function()
+		UpdateWirePositions()
+	end))
+
+	table.insert(ManagerConnections, WireManager.WireCreated:Connect(function(WireData: Types.WireInstance)
+		CreateWireUI(WireData)
+		UpdateWirePositions()
+	end))
+
+	table.insert(ManagerConnections, WireManager.WireDeleted:Connect(function(WireId: string)
+		local WireUI = WireInstances[WireId]
+		if WireUI then
+			WireUI.Destroy()
+			WireInstances[WireId] = nil
+		end
+	end))
+
+	table.insert(ManagerConnections, WireManager.ConnectionStarted:Connect(function(ConnectionState)
+		PreviewWire = Wire.CreatePreview(CanvasInstance.Content, ConnectionState.FromPortType :: "Flow" | "Signal")
+		UpdatePreviewWire()
+	end))
+
+	table.insert(ManagerConnections, WireManager.ConnectionCanceled:Connect(function()
+		ClearPreviewWire()
+	end))
+
+	table.insert(ManagerConnections, WireManager.ConnectionEnded:Connect(function()
+		ClearPreviewWire()
+	end))
+
+	table.insert(ManagerConnections, CommentManager.CommentAdded:Connect(function(CommentData: Types.CommentData)
+		CreateCommentUI(CommentData)
+	end))
+
+	table.insert(ManagerConnections, CommentManager.CommentDeleted:Connect(function(CommentId: string)
+		local CommentUI = CommentInstances[CommentId]
+		if CommentUI then
+			CommentUI.Destroy()
+			CommentInstances[CommentId] = nil
+		end
+	end))
+
+	table.insert(ManagerConnections, CommentManager.CommentPropertyChanged:Connect(function(CommentId: string, Key: string, Value: any)
+		local CommentUI = CommentInstances[CommentId]
+		if CommentUI then
+			if Key == "Title" then
+				CommentUI.SetTitle(Value)
+			elseif Key == "Text" then
+				CommentUI.SetText(Value)
+			elseif Key == "Color" then
+				CommentUI.SetColor(Value)
+			end
+		end
+	end))
+
+	table.insert(EditorConnections, UserInputService.InputChanged:Connect(function(Input: InputObject)
+		if Input.UserInputType == Enum.UserInputType.MouseMovement then
+			UpdatePreviewWire()
+		end
+	end))
+
+	table.insert(EditorConnections, UserInputService.InputEnded:Connect(function(Input: InputObject)
+		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+			if WireManager.IsConnecting() then
+				WireManager.CancelConnection()
+			end
+		end
+	end))
+
+	table.insert(EditorConnections, UserInputService.InputBegan:Connect(function(Input: InputObject, GameProcessed: boolean)
+		if GameProcessed then
+			return
+		end
+		if Input.KeyCode == Enum.KeyCode.Delete or Input.KeyCode == Enum.KeyCode.Backspace then
+			local SelectedCommentId = EditorState.GetSelectedCommentId()
+			local SelectedNodeId = EditorState.GetSelectedNodeId()
+
+			if SelectedCommentId then
+				CommentManager.Delete(SelectedCommentId)
+			elseif SelectedNodeId then
+				if NodeManager.CanDelete(SelectedNodeId) then
+					WireManager.DeleteByNode(SelectedNodeId)
+					NodeManager.Delete(SelectedNodeId)
+				else
+					Notification.Warning("Cannot delete Branch Start node.", Container)
+				end
+			end
+		end
+	end))
 
 	EditorInstance = {
 		Frame = Container,
 	} :: any
 
 	function EditorInstance.LoadSkill(SkillData: any)
-		State = EditorWindow.ImportSkillData(SkillData)
-		ToolbarPanel.SetSkillName(State.DisplayName)
+		local NewState = SkillSerializer.Import(SkillData)
+		EditorState.Set(NewState)
+		ToolbarPanel.SetSkillName(NewState.DisplayName)
 		ToolbarPanel.SetDirty(false)
-		BranchListPanel.SetBranches(State.Branches)
+		BranchListPanel.SetBranches(NewState.Branches)
 
-		local FirstBranchId: string? = nil
-		for BranchId, Branch in State.Branches do
-			if Branch.IsEntry then
-				FirstBranchId = BranchId
-				break
-			end
-			if not FirstBranchId then
-				FirstBranchId = BranchId
-			end
-		end
-
+		local FirstBranchId = BranchManager.SelectFirst()
 		if FirstBranchId then
-			SelectBranch(FirstBranchId)
+			RenderCurrentBranch()
 		end
 	end
 
 	function EditorInstance.NewSkill()
-		State.SkillId = ""
-		State.DisplayName = "New Skill"
-		State.Branches = {}
-		State.IsDirty = false
-		State.SelectedCommentId = nil
-		ToolbarPanel.SetSkillName("New Skill")
-		ToolbarPanel.SetDirty(false)
-		BranchListPanel.SetBranches({})
-		ClearCanvas()
+		ResetToNewSkill()
 	end
 
 	function EditorInstance.GetSkillData(): any
-		return EditorWindow.ExportSkillData(State)
+		return SkillSerializer.Export(EditorState.Get())
 	end
 
 	function EditorInstance.SetSkillId(NewSkillId: string)
-		State.SkillId = NewSkillId
+		EditorState.SetSkillId(NewSkillId)
 	end
 
 	function EditorInstance.GetSkillId(): string
-		return State.SkillId
+		return EditorState.GetSkillId()
 	end
 
 	function EditorInstance.SetVisible(Visible: boolean)
@@ -915,6 +624,13 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		end
 		table.clear(EditorConnections)
 
+		for _, Connection in ManagerConnections do
+			if Connection.Disconnect then
+				Connection:Disconnect()
+			end
+		end
+		table.clear(ManagerConnections)
+
 		ClearCanvas()
 		ToolbarPanel.Destroy()
 		PalettePanel.Destroy()
@@ -925,232 +641,6 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 	end
 
 	return EditorInstance
-end
-
-local function SerializeWires(Wires: { Types.WireInstance }): { any }
-	local SerializedWires = {}
-	for _, WireData in Wires do
-		table.insert(SerializedWires, {
-			WireId = WireData.WireId,
-			FromNodeId = WireData.FromNodeId,
-			FromPortName = WireData.FromPortName,
-			ToNodeId = WireData.ToNodeId,
-			ToPortName = WireData.ToPortName,
-			WireType = WireData.WireType,
-		})
-	end
-	return SerializedWires
-end
-
-local function DeserializeWires(SerializedWires: { any }?): { Types.WireInstance }
-	if not SerializedWires then
-		return {}
-	end
-
-	local Wires: { Types.WireInstance } = {}
-	for _, WireData in SerializedWires do
-		table.insert(Wires, {
-			WireId = WireData.WireId or HttpService:GenerateGUID(false),
-			FromNodeId = WireData.FromNodeId,
-			FromPortName = WireData.FromPortName,
-			ToNodeId = WireData.ToNodeId,
-			ToPortName = WireData.ToPortName,
-			WireType = WireData.WireType or "Flow",
-		})
-	end
-	return Wires
-end
-
-local function SerializeComments(Comments: { Types.CommentData }?): { any }?
-	if not Comments or #Comments == 0 then
-		return nil
-	end
-
-	local SerializedComments = {}
-	for _, CommentData in Comments do
-		table.insert(SerializedComments, {
-			CommentId = CommentData.CommentId,
-			Title = CommentData.Title,
-			Text = CommentData.Text,
-			Color = {
-				R = CommentData.Color.R,
-				G = CommentData.Color.G,
-				B = CommentData.Color.B,
-			},
-			Position = {
-				X = CommentData.Position.X,
-				Y = CommentData.Position.Y,
-			},
-			Size = {
-				X = CommentData.Size.X,
-				Y = CommentData.Size.Y,
-			},
-		})
-	end
-	return SerializedComments
-end
-
-local function DeserializeComments(SerializedComments: { any }?): { Types.CommentData }
-	if not SerializedComments then
-		return {}
-	end
-
-	local Comments: { Types.CommentData } = {}
-	for _, Data in SerializedComments do
-		local Color = Comment.DefaultColor
-		if Data.Color then
-			Color = Color3.new(Data.Color.R or 0, Data.Color.G or 0, Data.Color.B or 0)
-		end
-
-		local Position = Vector2.zero
-		if Data.Position then
-			Position = Vector2.new(Data.Position.X or 0, Data.Position.Y or 0)
-		end
-
-		local Size = Vector2.new(300, 150)
-		if Data.Size then
-			Size = Vector2.new(Data.Size.X or 300, Data.Size.Y or 150)
-		end
-
-		table.insert(Comments, {
-			CommentId = Data.CommentId or HttpService:GenerateGUID(false),
-			Title = Data.Title or "Comment",
-			Text = Data.Text or "",
-			Color = Color,
-			Position = Position,
-			Size = Size,
-		})
-	end
-	return Comments
-end
-
-function EditorWindow.ImportSkillData(SkillData: any): Types.EditorState
-	local State: Types.EditorState = {
-		SkillId = SkillData.SkillId or "",
-		DisplayName = SkillData.DisplayName or "Imported Skill",
-		Branches = {},
-		SelectedNodeId = nil,
-		SelectedBranchId = nil,
-		SelectedWireId = nil,
-		SelectedCommentId = nil,
-		CanvasOffset = Vector2.zero,
-		CanvasZoom = 1,
-		IsDirty = false,
-	}
-
-	local EditorData = SkillData.EditorData or {}
-	local EditorWires = EditorData.Wires or {}
-	local EditorComments = EditorData.Comments or {}
-
-	if SkillData.Timeline then
-		local BranchId = HttpService:GenerateGUID(false)
-		local Nodes: { Types.NodeInstance } = {}
-		local FallbackPositionX = 0
-
-		for _, Block in SkillData.Timeline do
-			local FallbackPosition = Vector2.new(FallbackPositionX, 0)
-			local NodeData = NodeFactory.BlockToNode(Block, FallbackPosition)
-			table.insert(Nodes, NodeData)
-			FallbackPositionX = FallbackPositionX + Theme.Sizes.NodeWidth + 40
-		end
-
-		local BranchWires = DeserializeWires(EditorWires["Main"] or EditorWires[1])
-		local BranchComments = DeserializeComments(EditorComments["Main"])
-
-		State.Branches[BranchId] = {
-			BranchId = BranchId,
-			BranchName = "Main",
-			IsEntry = true,
-			Nodes = Nodes,
-			Wires = BranchWires,
-			Comments = BranchComments,
-			Position = Vector2.zero,
-		}
-	elseif SkillData.Branches then
-		for BranchName, BranchData in SkillData.Branches do
-			local BranchId = HttpService:GenerateGUID(false)
-			local Nodes: { Types.NodeInstance } = {}
-			local FallbackPositionX = 0
-
-			if BranchData.Timeline then
-				for _, Block in BranchData.Timeline do
-					local FallbackPosition = Vector2.new(FallbackPositionX, 0)
-					local NodeData = NodeFactory.BlockToNode(Block, FallbackPosition)
-					table.insert(Nodes, NodeData)
-					FallbackPositionX = FallbackPositionX + Theme.Sizes.NodeWidth + 40
-				end
-			end
-
-			local BranchWires = DeserializeWires(EditorWires[BranchName])
-			local BranchComments = DeserializeComments(EditorComments[BranchName])
-
-			State.Branches[BranchId] = {
-				BranchId = BranchId,
-				BranchName = BranchName,
-				IsEntry = BranchData.Entry == true,
-				Nodes = Nodes,
-				Wires = BranchWires,
-				Comments = BranchComments,
-				Position = Vector2.zero,
-			}
-		end
-	end
-
-	return State
-end
-
-function EditorWindow.ExportSkillData(State: Types.EditorState): any
-	local SkillData: any = {
-		SkillId = State.SkillId,
-		DisplayName = State.DisplayName,
-		IsPlayerMade = true,
-	}
-
-	local BranchCount = 0
-	for _ in State.Branches do
-		BranchCount = BranchCount + 1
-	end
-
-	local EditorWires: { [string]: any } = {}
-	local EditorComments: { [string]: any } = {}
-
-	if BranchCount == 1 then
-		for _, Branch in State.Branches do
-			if Branch.IsEntry then
-				local Timeline = {}
-				for _, NodeData in Branch.Nodes do
-					local Block = NodeFactory.NodeToBlock(NodeData)
-					table.insert(Timeline, Block)
-				end
-				SkillData.Timeline = Timeline
-				EditorWires["Main"] = SerializeWires(Branch.Wires)
-				EditorComments["Main"] = SerializeComments(Branch.Comments)
-				break
-			end
-		end
-	else
-		SkillData.Branches = {}
-		for _, Branch in State.Branches do
-			local Timeline = {}
-			for _, NodeData in Branch.Nodes do
-				local Block = NodeFactory.NodeToBlock(NodeData)
-				table.insert(Timeline, Block)
-			end
-			SkillData.Branches[Branch.BranchName] = {
-				Entry = Branch.IsEntry,
-				Timeline = Timeline,
-			}
-			EditorWires[Branch.BranchName] = SerializeWires(Branch.Wires)
-			EditorComments[Branch.BranchName] = SerializeComments(Branch.Comments)
-		end
-	end
-
-	SkillData.EditorData = {
-		Wires = EditorWires,
-		Comments = EditorComments,
-	}
-
-	return SkillData
 end
 
 return EditorWindow

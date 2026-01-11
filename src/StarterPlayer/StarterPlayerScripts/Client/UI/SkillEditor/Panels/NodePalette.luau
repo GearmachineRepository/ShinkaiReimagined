@@ -2,6 +2,7 @@
 
 local Theme = require(script.Parent.Parent.Theme)
 local Panel = require(script.Parent.Parent.Components.Panel)
+local Tooltip = require(script.Parent.Parent.Components.Tooltip)
 local NodeRegistry = require(script.Parent.Parent.Nodes.NodeRegistry)
 
 local NodePalette = {}
@@ -28,6 +29,7 @@ local CATEGORIES = {
 local COMMENT_DEFINITION = {
 	BlockType = "Comment",
 	DisplayName = "Comment",
+	Description = "A visual note for organizing and documenting your skill graph.",
 	Color = Color3.fromRGB(90, 90, 95),
 }
 
@@ -76,6 +78,7 @@ function NodePalette.Create(Config: NodePaletteConfig): NodePaletteInstance
 	Theme.ApplyListLayout(ContentScroll, Enum.FillDirection.Vertical, Theme.Sizes.GapSmall)
 
 	local Connections: { RBXScriptConnection } = {}
+	local TooltipCleanups: { () -> () } = {}
 	local CategoryOrder = 0
 
 	for _, Category in CATEGORIES do
@@ -170,6 +173,11 @@ function NodePalette.Create(Config: NodePaletteConfig): NodePaletteInstance
 					Config.OnNodeSelected(BlockType)
 				end
 			end))
+
+			if Definition.Description then
+				local Cleanup = Tooltip.Bind(NodeButton, Definition.Description)
+				table.insert(TooltipCleanups, Cleanup)
+			end
 		end
 	end
 
@@ -182,6 +190,12 @@ function NodePalette.Create(Config: NodePaletteConfig): NodePaletteInstance
 			Connection:Disconnect()
 		end
 		table.clear(Connections)
+
+		for _, Cleanup in TooltipCleanups do
+			Cleanup()
+		end
+		table.clear(TooltipCleanups)
+
 		Container:Destroy()
 	end
 

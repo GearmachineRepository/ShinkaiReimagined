@@ -121,8 +121,20 @@ function Wire.Create(Config: WireConfig): WireInstance
 	end
 
 	local function RenderBezier(P0: Vector2, P3: Vector2)
-		local ControlOffset = math.abs(P3.X - P0.X) * 0.5
-		ControlOffset = math.max(ControlOffset, WIRE_CURVATURE)
+		local Delta = P3 - P0
+		local Distance = Delta.Magnitude
+
+		local DistanceStart = 60
+		local DistanceFull = 260
+
+		local Normalized = 0
+		if DistanceFull > DistanceStart then
+			Normalized = (Distance - DistanceStart) / (DistanceFull - DistanceStart)
+		end
+		Normalized = math.clamp(Normalized, 0, 1)
+
+		local MaxCurvature = WIRE_CURVATURE
+		local ControlOffset = MaxCurvature * Normalized
 
 		local P1 = P0 + Vector2.new(ControlOffset, 0)
 		local P2 = P3 - Vector2.new(ControlOffset, 0)
@@ -134,9 +146,9 @@ function Wire.Create(Config: WireConfig): WireInstance
 			local Point0 = CubicBezier(P0, P1, P2, P3, T0)
 			local Point1 = CubicBezier(P0, P1, P2, P3, T1)
 
-			local Delta = Point1 - Point0
-			local Length = Delta.Magnitude
-			local Angle = math.atan2(Delta.Y, Delta.X)
+			local SegmentDelta = Point1 - Point0
+			local Length = SegmentDelta.Magnitude
+			local Angle = math.atan2(SegmentDelta.Y, SegmentDelta.X)
 
 			Segment.Size = UDim2.fromOffset(math.max(Length + 2, 4), Theme.Sizes.WireThickness)
 			Segment.Position = UDim2.fromOffset(Point0.X, Point0.Y)

@@ -8,6 +8,8 @@ local TextInput = require(script.Parent.Parent.Components.TextInput)
 local NumberInput = require(script.Parent.Parent.Components.NumberInput)
 local Toggle = require(script.Parent.Parent.Components.Toggle)
 local Dropdown = require(script.Parent.Parent.Components.Dropdown)
+local ColorPicker = require(script.Parent.Parent.Components.ColorPicker)
+local Tooltip = require(script.Parent.Parent.Components.Tooltip)
 local NodeRegistry = require(script.Parent.Parent.Nodes.NodeRegistry)
 
 local PropertyPanel = {}
@@ -16,17 +18,22 @@ export type PropertyPanelConfig = {
 	Parent: GuiObject?,
 	OnPropertyChanged: ((NodeId: string, Key: string, Value: any) -> ())?,
 	OnNodeDelete: ((NodeId: string) -> ())?,
+	OnCommentPropertyChanged: ((CommentId: string, Key: string, Value: any) -> ())?,
+	OnCommentDelete: ((CommentId: string) -> ())?,
+	GetBranchOptions: (() -> { string })?,
 }
 
 export type PropertyPanelInstance = {
 	Frame: Frame,
 	SetNode: (NodeData: Types.NodeInstance?) -> (),
+	SetComment: (CommentData: Types.CommentData?) -> (),
 	Refresh: () -> (),
 	Destroy: () -> (),
 }
 
 function PropertyPanel.Create(Config: PropertyPanelConfig): PropertyPanelInstance
 	local CurrentNode: Types.NodeInstance? = nil
+	local CurrentComment: Types.CommentData? = nil
 	local PropertyInputs: { any } = {}
 
 	local Container = Panel.Create({
@@ -119,6 +126,11 @@ function PropertyPanel.Create(Config: PropertyPanelConfig): PropertyPanelInstanc
 		Label.ZIndex = Theme.ZIndex.Panel
 		Label.Parent = Row
 
+		if PropertyDef.Tooltip then
+			Label.Active = true
+			Tooltip.Bind(Label, PropertyDef.Tooltip)
+		end
+
 		local InputContainer = Instance.new("Frame")
 		InputContainer.Name = "InputContainer"
 		InputContainer.Size = UDim2.new(1, 0, 0, Theme.Sizes.InputHeight)
@@ -180,6 +192,20 @@ function PropertyPanel.Create(Config: PropertyPanelConfig): PropertyPanelInstanc
 					end
 				end,
 			})
+
+		elseif PropertyDef.Type == "BranchDropdown" then
+			local BranchOptions = if Config.GetBranchOptions then Config.GetBranchOptions() else {}
+			InputInstance = Dropdown.Create({
+				Options = BranchOptions,
+				Selected = Value,
+				ZIndex = Theme.ZIndex.Panel,
+				Parent = InputContainer,
+				OnSelected = function(Option: string)
+					if CurrentNode and Config.OnPropertyChanged then
+						Config.OnPropertyChanged(CurrentNode.NodeId, PropertyDef.Key, Option)
+					end
+				end,
+			})
 		end
 
 		if InputInstance then
@@ -217,55 +243,280 @@ function PropertyPanel.Create(Config: PropertyPanelConfig): PropertyPanelInstanc
 		NodeTypeLabel.Parent = ContentScroll
 		table.insert(PropertyInputs, { Frame = NodeTypeLabel })
 
+		local PropertyStartIndex = 1
+
+		if Definition.Description then
+			local DescriptionLabel = Instance.new("TextLabel")
+			DescriptionLabel.Name = "Description"
+			DescriptionLabel.Size = UDim2.fromScale(1, 0)
+			DescriptionLabel.AutomaticSize = Enum.AutomaticSize.Y
+			DescriptionLabel.BackgroundTransparency = 1
+			DescriptionLabel.Text = Definition.Description
+			DescriptionLabel.TextColor3 = Theme.Colors.TextMuted
+			DescriptionLabel.FontFace = Theme.Fonts.Default
+			DescriptionLabel.TextSize = Theme.TextSizes.Small
+			DescriptionLabel.TextWrapped = true
+			DescriptionLabel.TextXAlignment = Enum.TextXAlignment.Left
+			DescriptionLabel.LayoutOrder = 1
+			DescriptionLabel.ZIndex = Theme.ZIndex.Panel
+			DescriptionLabel.Parent = ContentScroll
+			table.insert(PropertyInputs, { Frame = DescriptionLabel })
+			PropertyStartIndex = 2
+		end
+
 		for Index, PropertyDef in Definition.Properties do
 			local Value = CurrentNode.Properties[PropertyDef.Key]
-			CreatePropertyRow(PropertyDef, Value, Index)
+			CreatePropertyRow(PropertyDef, Value, Index + PropertyStartIndex - 1)
 		end
 
 		local Spacer = Instance.new("Frame")
 		Spacer.Name = "Spacer"
 		Spacer.Size = UDim2.new(1, 0, 0, 8)
 		Spacer.BackgroundTransparency = 1
-		Spacer.LayoutOrder = #Definition.Properties + 1
+		Spacer.LayoutOrder = #Definition.Properties + PropertyStartIndex
+		Spacer.Parent = ContentScroll
+		table.insert(PropertyInputs, { Frame = Spacer })
+
+		if CurrentNode.BlockType ~= "BranchStart" then
+			local DeleteButton = Button.Create({
+				Name = "DeleteNode",
+				Text = "Delete Node",
+				Size = UDim2.new(1, 0, 0, 32),
+				BackgroundColor = Theme.Colors.Error,
+				ZIndex = Theme.ZIndex.Panel,
+				Parent = ContentScroll,
+				OnClick = function()
+					if CurrentNode and Config.OnNodeDelete then
+						Config.OnNodeDelete(CurrentNode.NodeId)
+					end
+				end,
+			})
+			DeleteButton.Frame.LayoutOrder = #Definition.Properties + PropertyStartIndex + 1
+			table.insert(PropertyInputs, DeleteButton)
+		end
+	end
+
+	local function BuildCommentProperties()
+		ClearProperties()
+
+		if not CurrentComment then
+			EmptyLabel.Visible = true
+			return
+		end
+
+		EmptyLabel.Visible = false
+
+		local CommentHeader = Instance.new("TextLabel")
+		CommentHeader.Name = "CommentHeader"
+		CommentHeader.Size = UDim2.new(1, 0, 0, 24)
+		CommentHeader.BackgroundTransparency = 1
+		CommentHeader.Text = "Comment"
+		CommentHeader.TextColor3 = Theme.Colors.Text
+		CommentHeader.FontFace = Theme.Fonts.Bold
+		CommentHeader.TextSize = Theme.TextSizes.Large
+		CommentHeader.TextXAlignment = Enum.TextXAlignment.Left
+		CommentHeader.LayoutOrder = 0
+		CommentHeader.ZIndex = Theme.ZIndex.Panel
+		CommentHeader.Parent = ContentScroll
+		table.insert(PropertyInputs, { Frame = CommentHeader })
+
+		local TitleRow = Instance.new("Frame")
+		TitleRow.Name = "Property_Title"
+		TitleRow.Size = UDim2.new(1, 0, 0, Theme.Sizes.InputHeight + 24)
+		TitleRow.BackgroundTransparency = 1
+		TitleRow.LayoutOrder = 1
+		TitleRow.ZIndex = Theme.ZIndex.Panel
+		TitleRow.Parent = ContentScroll
+
+		local TitleLabel = Instance.new("TextLabel")
+		TitleLabel.Name = "Label"
+		TitleLabel.Size = UDim2.new(1, 0, 0, 18)
+		TitleLabel.BackgroundTransparency = 1
+		TitleLabel.Text = "Title"
+		TitleLabel.TextColor3 = Theme.Colors.TextMuted
+		TitleLabel.FontFace = Theme.Fonts.Default
+		TitleLabel.TextSize = Theme.TextSizes.Small
+		TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+		TitleLabel.ZIndex = Theme.ZIndex.Panel
+		TitleLabel.Parent = TitleRow
+
+		local TitleContainer = Instance.new("Frame")
+		TitleContainer.Name = "InputContainer"
+		TitleContainer.Size = UDim2.new(1, 0, 0, Theme.Sizes.InputHeight)
+		TitleContainer.Position = UDim2.fromOffset(0, 20)
+		TitleContainer.BackgroundTransparency = 1
+		TitleContainer.ZIndex = Theme.ZIndex.Panel
+		TitleContainer.Parent = TitleRow
+
+		local TitleInput = TextInput.Create({
+			Text = CurrentComment.Title,
+			PlaceholderText = "Title...",
+			ZIndex = Theme.ZIndex.Panel,
+			Parent = TitleContainer,
+			OnFocusLost = function(Text: string)
+				if CurrentComment and Config.OnCommentPropertyChanged then
+					Config.OnCommentPropertyChanged(CurrentComment.CommentId, "Title", Text)
+				end
+			end,
+		})
+		table.insert(PropertyInputs, TitleInput)
+		table.insert(PropertyInputs, { Frame = TitleRow })
+
+		local TextRow = Instance.new("Frame")
+		TextRow.Name = "Property_Text"
+		TextRow.Size = UDim2.new(1, 0, 0, 80 + 24)
+		TextRow.BackgroundTransparency = 1
+		TextRow.LayoutOrder = 2
+		TextRow.ZIndex = Theme.ZIndex.Panel
+		TextRow.Parent = ContentScroll
+
+		local TextLabel = Instance.new("TextLabel")
+		TextLabel.Name = "Label"
+		TextLabel.Size = UDim2.new(1, 0, 0, 18)
+		TextLabel.BackgroundTransparency = 1
+		TextLabel.Text = "Body"
+		TextLabel.TextColor3 = Theme.Colors.TextMuted
+		TextLabel.FontFace = Theme.Fonts.Default
+		TextLabel.TextSize = Theme.TextSizes.Small
+		TextLabel.TextXAlignment = Enum.TextXAlignment.Left
+		TextLabel.ZIndex = Theme.ZIndex.Panel
+		TextLabel.Parent = TextRow
+
+		local TextContainer = Instance.new("Frame")
+		TextContainer.Name = "InputContainer"
+		TextContainer.Size = UDim2.new(1, 0, 0, 80)
+		TextContainer.Position = UDim2.fromOffset(0, 20)
+		TextContainer.BackgroundTransparency = 1
+		TextContainer.ZIndex = Theme.ZIndex.Panel
+		TextContainer.Parent = TextRow
+
+		local TextInputBox = Instance.new("TextBox")
+		TextInputBox.Name = "TextInput"
+		TextInputBox.Size = UDim2.fromScale(1, 1)
+		TextInputBox.BackgroundColor3 = Theme.Colors.BackgroundDark
+		TextInputBox.BorderSizePixel = 0
+		TextInputBox.Text = CurrentComment.Text
+		TextInputBox.PlaceholderText = "Comment body..."
+		TextInputBox.TextColor3 = Theme.Colors.Text
+		TextInputBox.PlaceholderColor3 = Theme.Colors.TextMuted
+		TextInputBox.FontFace = Theme.Fonts.Default
+		TextInputBox.TextSize = Theme.TextSizes.Default
+		TextInputBox.TextXAlignment = Enum.TextXAlignment.Left
+		TextInputBox.TextYAlignment = Enum.TextYAlignment.Top
+		TextInputBox.ClearTextOnFocus = false
+		TextInputBox.MultiLine = true
+		TextInputBox.TextWrapped = true
+		TextInputBox.ZIndex = Theme.ZIndex.Panel
+		TextInputBox.Parent = TextContainer
+
+		Theme.ApplyCorner(TextInputBox, Theme.Sizes.BorderRadiusSmall)
+		Theme.ApplyStroke(TextInputBox, Theme.Colors.Border)
+		Theme.ApplyPadding(TextInputBox, UDim.new(0, 8))
+
+		TextInputBox.FocusLost:Connect(function()
+			if CurrentComment and Config.OnCommentPropertyChanged then
+				Config.OnCommentPropertyChanged(CurrentComment.CommentId, "Text", TextInputBox.Text)
+			end
+		end)
+
+		table.insert(PropertyInputs, { Frame = TextRow })
+
+		local ColorRow = Instance.new("Frame")
+		ColorRow.Name = "Property_Color"
+		ColorRow.Size = UDim2.new(1, 0, 0, Theme.Sizes.InputHeight + 24)
+		ColorRow.BackgroundTransparency = 1
+		ColorRow.LayoutOrder = 3
+		ColorRow.ZIndex = Theme.ZIndex.Panel
+		ColorRow.Parent = ContentScroll
+
+		local ColorLabel = Instance.new("TextLabel")
+		ColorLabel.Name = "Label"
+		ColorLabel.Size = UDim2.new(1, 0, 0, 18)
+		ColorLabel.BackgroundTransparency = 1
+		ColorLabel.Text = "Color"
+		ColorLabel.TextColor3 = Theme.Colors.TextMuted
+		ColorLabel.FontFace = Theme.Fonts.Default
+		ColorLabel.TextSize = Theme.TextSizes.Small
+		ColorLabel.TextXAlignment = Enum.TextXAlignment.Left
+		ColorLabel.ZIndex = Theme.ZIndex.Panel
+		ColorLabel.Parent = ColorRow
+
+		local ColorContainer = Instance.new("Frame")
+		ColorContainer.Name = "InputContainer"
+		ColorContainer.Size = UDim2.new(1, 0, 0, Theme.Sizes.InputHeight)
+		ColorContainer.Position = UDim2.fromOffset(0, 20)
+		ColorContainer.BackgroundTransparency = 1
+		ColorContainer.ZIndex = Theme.ZIndex.Panel
+		ColorContainer.Parent = ColorRow
+
+		local ColorInput = ColorPicker.Create({
+			Color = CurrentComment.Color,
+			ZIndex = Theme.ZIndex.Panel + 50,
+			Parent = ColorContainer,
+			OnChanged = function(Color: Color3)
+				if CurrentComment and Config.OnCommentPropertyChanged then
+					Config.OnCommentPropertyChanged(CurrentComment.CommentId, "Color", Color)
+				end
+			end,
+		})
+		table.insert(PropertyInputs, ColorInput)
+		table.insert(PropertyInputs, { Frame = ColorRow })
+
+		local Spacer = Instance.new("Frame")
+		Spacer.Name = "Spacer"
+		Spacer.Size = UDim2.new(1, 0, 0, 8)
+		Spacer.BackgroundTransparency = 1
+		Spacer.LayoutOrder = 4
 		Spacer.Parent = ContentScroll
 		table.insert(PropertyInputs, { Frame = Spacer })
 
 		local DeleteButton = Button.Create({
-			Name = "DeleteNode",
-			Text = "Delete Node",
+			Name = "DeleteComment",
+			Text = "Delete Comment",
 			Size = UDim2.new(1, 0, 0, 32),
 			BackgroundColor = Theme.Colors.Error,
 			ZIndex = Theme.ZIndex.Panel,
 			Parent = ContentScroll,
 			OnClick = function()
-				if CurrentNode and Config.OnNodeDelete then
-					Config.OnNodeDelete(CurrentNode.NodeId)
+				if CurrentComment and Config.OnCommentDelete then
+					Config.OnCommentDelete(CurrentComment.CommentId)
 				end
 			end,
 		})
-		DeleteButton.Frame.LayoutOrder = #Definition.Properties + 2
+		DeleteButton.Frame.LayoutOrder = 5
 		table.insert(PropertyInputs, DeleteButton)
 	end
 
-	local Instance: PropertyPanelInstance = {
+	local PanelInstance: PropertyPanelInstance = {
 		Frame = Container,
 	} :: any
 
-	function Instance.SetNode(NodeData: Types.NodeInstance?)
+	function PanelInstance.SetNode(NodeData: Types.NodeInstance?)
 		CurrentNode = NodeData
+		CurrentComment = nil
 		BuildProperties()
 	end
 
-	function Instance.Refresh()
-		BuildProperties()
+	function PanelInstance.SetComment(CommentData: Types.CommentData?)
+		CurrentComment = CommentData
+		CurrentNode = nil
+		BuildCommentProperties()
 	end
 
-	function Instance.Destroy()
+	function PanelInstance.Refresh()
+		if CurrentComment then
+			BuildCommentProperties()
+		else
+			BuildProperties()
+		end
+	end
+
+	function PanelInstance.Destroy()
 		ClearProperties()
 		Container:Destroy()
 	end
 
-	return Instance
+	return PanelInstance
 end
 
 return PropertyPanel
