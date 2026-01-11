@@ -54,6 +54,7 @@ function Node.Create(Config: NodeConfig): NodeInstance
 	Container.BorderSizePixel = 0
 	Container.ZIndex = Theme.ZIndex.Node
 	Container.ClipsDescendants = false
+	Container.Active = true
 
 	Theme.ApplyCorner(Container, Theme.Sizes.BorderRadiusSmall)
 	local Stroke = Theme.ApplyStroke(Container, Theme.Colors.Border)
@@ -64,6 +65,7 @@ function Node.Create(Config: NodeConfig): NodeInstance
 	Header.BackgroundColor3 = Config.Color
 	Header.BorderSizePixel = 0
 	Header.ZIndex = Theme.ZIndex.NodeHeader
+	Header.Active = false
 	Header.Parent = Container
 
 	local HeaderCorner = Instance.new("UICorner")
@@ -77,6 +79,7 @@ function Node.Create(Config: NodeConfig): NodeInstance
 	HeaderMask.BackgroundColor3 = Config.Color
 	HeaderMask.BorderSizePixel = 0
 	HeaderMask.ZIndex = Theme.ZIndex.NodeHeader
+	HeaderMask.Active = false
 	HeaderMask.Parent = Header
 
 	local Title = Instance.new("TextLabel")
@@ -93,13 +96,13 @@ function Node.Create(Config: NodeConfig): NodeInstance
 	Title.ZIndex = Theme.ZIndex.NodeHeader
 	Title.Parent = Header
 
-	local BodyDragArea = Instance.new("TextButton")
+	local BodyDragArea = Instance.new("Frame")
 	BodyDragArea.Name = "BodyDragArea"
 	BodyDragArea.Size = UDim2.new(1, -48, 1, -Theme.Sizes.NodeHeaderHeight)
 	BodyDragArea.Position = UDim2.fromOffset(24, Theme.Sizes.NodeHeaderHeight)
 	BodyDragArea.BackgroundTransparency = 1
-	BodyDragArea.Text = ""
 	BodyDragArea.ZIndex = Theme.ZIndex.NodeContent
+	BodyDragArea.Active = false
 	BodyDragArea.Parent = Container
 
 	local InputContainer = Instance.new("Frame")
@@ -108,6 +111,7 @@ function Node.Create(Config: NodeConfig): NodeInstance
 	InputContainer.Position = UDim2.fromOffset(0, Theme.Sizes.NodeHeaderHeight)
 	InputContainer.BackgroundTransparency = 1
 	InputContainer.ZIndex = Theme.ZIndex.NodeContent
+	InputContainer.Active = false
 	InputContainer.Parent = Container
 
 	local InputLayout = Instance.new("UIListLayout")
@@ -122,6 +126,7 @@ function Node.Create(Config: NodeConfig): NodeInstance
 	OutputContainer.Position = UDim2.new(0.5, 0, 0, Theme.Sizes.NodeHeaderHeight)
 	OutputContainer.BackgroundTransparency = 1
 	OutputContainer.ZIndex = Theme.ZIndex.NodeContent
+	OutputContainer.Active = false
 	OutputContainer.Parent = Container
 
 	local OutputLayout = Instance.new("UIListLayout")
@@ -227,10 +232,33 @@ function Node.Create(Config: NodeConfig): NodeInstance
 
 	UpdateZIndex(false)
 
+	local function IsClickOnSelf(ScreenPoint: Vector2): boolean
+		local PlayerGui = Container:FindFirstAncestorOfClass("PlayerGui")
+		if not PlayerGui then
+			return true
+		end
+
+		local GuisAtPosition = PlayerGui:GetGuiObjectsAtPosition(ScreenPoint.X, ScreenPoint.Y)
+		for _, Gui in GuisAtPosition do
+			if Gui == Container or Gui:IsDescendantOf(Container) then
+				return true
+			end
+			if Gui.Active and Gui:IsA("GuiObject") then
+				return false
+			end
+		end
+		return true
+	end
+
 	local function StartDrag(Input: InputObject)
+		local ClickPos = Vector2.new(Input.Position.X, Input.Position.Y)
+		if not IsClickOnSelf(ClickPos) then
+			return
+		end
+
 		IsDragging = true
 		DragStartPosition = Position
-		DragStartMouse = Vector2.new(Input.Position.X, Input.Position.Y)
+		DragStartMouse = ClickPos
 		UpdateZIndex(true)
 
 		if Config.OnSelected then
@@ -238,13 +266,7 @@ function Node.Create(Config: NodeConfig): NodeInstance
 		end
 	end
 
-	table.insert(Connections, Header.InputBegan:Connect(function(Input: InputObject)
-		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-			StartDrag(Input)
-		end
-	end))
-
-	table.insert(Connections, BodyDragArea.InputBegan:Connect(function(Input: InputObject)
+	table.insert(Connections, Container.InputBegan:Connect(function(Input: InputObject)
 		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
 			StartDrag(Input)
 		end
@@ -274,22 +296,22 @@ function Node.Create(Config: NodeConfig): NodeInstance
 		end
 	end))
 
-	local Instance: NodeInstance = {
+	local NodeInstance: NodeInstance = {
 		Frame = Container,
 		NodeId = Config.NodeId,
 		BlockType = Config.BlockType,
 	} :: any
 
-	function Instance.GetPosition(): Vector2
+	function NodeInstance.GetPosition(): Vector2
 		return Position
 	end
 
-	function Instance.SetPosition(NewPosition: Vector2)
+	function NodeInstance.SetPosition(NewPosition: Vector2)
 		Position = NewPosition
 		Container.Position = UDim2.fromOffset(Position.X, Position.Y)
 	end
 
-	function Instance.SetSelected(Selected: boolean)
+	function NodeInstance.SetSelected(Selected: boolean)
 		IsSelected = Selected
 		if Selected then
 			Stroke.Color = Theme.Colors.BorderFocus
@@ -302,15 +324,15 @@ function Node.Create(Config: NodeConfig): NodeInstance
 		end
 	end
 
-	function Instance.GetPort(PortName: string): Port.PortInstance?
+	function NodeInstance.GetPort(PortName: string): Port.PortInstance?
 		return Ports[PortName]
 	end
 
-	function Instance.GetAllPorts(): { [string]: Port.PortInstance }
+	function NodeInstance.GetAllPorts(): { [string]: Port.PortInstance }
 		return Ports
 	end
 
-	function Instance.Destroy()
+	function NodeInstance.Destroy()
 		for _, Connection in Connections do
 			Connection:Disconnect()
 		end
@@ -324,7 +346,7 @@ function Node.Create(Config: NodeConfig): NodeInstance
 		Container:Destroy()
 	end
 
-	return Instance
+	return NodeInstance
 end
 
 return Node

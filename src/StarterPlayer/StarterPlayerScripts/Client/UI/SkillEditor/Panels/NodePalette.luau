@@ -17,11 +17,18 @@ export type NodePaletteInstance = {
 }
 
 local CATEGORIES = {
+	{ Name = "Utility", Types = { "Comment" } },
 	{ Name = "Flow", Types = { "Wait", "Branch" } },
 	{ Name = "Combat", Types = { "Hitbox", "HitCancel", "AddHealth" } },
 	{ Name = "Effects", Types = { "Animation", "Sound", "Velocity" } },
 	{ Name = "Logic", Types = { "Signal", "AndGate", "OrGate", "NotGate", "Timer", "Counter" } },
 	{ Name = "Advanced", Types = { "Skill" } },
+}
+
+local COMMENT_DEFINITION = {
+	BlockType = "Comment",
+	DisplayName = "Comment",
+	Color = Color3.fromRGB(90, 90, 95),
 }
 
 function NodePalette.Create(Config: NodePaletteConfig): NodePaletteInstance
@@ -102,7 +109,13 @@ function NodePalette.Create(Config: NodePaletteConfig): NodePaletteInstance
 		CategoryLabel.Parent = CategoryFrame
 
 		for TypeIndex, BlockType in Category.Types do
-			local Definition = NodeRegistry.Get(BlockType)
+			local Definition = nil
+			if BlockType == "Comment" then
+				Definition = COMMENT_DEFINITION
+			else
+				Definition = NodeRegistry.Get(BlockType) :: any
+			end
+
 			if not Definition then
 				continue
 			end
@@ -160,11 +173,11 @@ function NodePalette.Create(Config: NodePaletteConfig): NodePaletteInstance
 		end
 	end
 
-	local Instance: NodePaletteInstance = {
+	local PaletteInstance: NodePaletteInstance = {
 		Frame = Container,
 	} :: any
 
-	function Instance.Destroy()
+	function PaletteInstance.Destroy()
 		for _, Connection in Connections do
 			Connection:Disconnect()
 		end
@@ -172,7 +185,7 @@ function NodePalette.Create(Config: NodePaletteConfig): NodePaletteInstance
 		Container:Destroy()
 	end
 
-	return Instance
+	return PaletteInstance
 end
 
 return NodePalette

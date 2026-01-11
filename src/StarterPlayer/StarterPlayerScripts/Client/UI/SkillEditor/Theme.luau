@@ -3,6 +3,8 @@
 local Theme = {}
 
 Theme.Colors = {
+	Overlay = Color3.fromRGB(0,0,0),
+
 	Background = Color3.fromRGB(30, 30, 35),
 	BackgroundDark = Color3.fromRGB(22, 22, 26),
 	BackgroundLight = Color3.fromRGB(45, 45, 52),

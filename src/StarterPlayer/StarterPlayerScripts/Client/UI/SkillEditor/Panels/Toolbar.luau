@@ -135,23 +135,23 @@ function Toolbar.Create(Config: ToolbarConfig): ToolbarInstance
 		Container.Parent = Config.Parent
 	end
 
-	local Instance: ToolbarInstance = {
+	local ToolbarObj: ToolbarInstance = {
 		Frame = Container,
 	} :: any
 
-	function Instance.SetSkillName(Name: string)
+	function ToolbarObj.SetSkillName(Name: string)
 		NameInput.SetText(Name)
 	end
 
-	function Instance.SetDirty(Dirty: boolean)
+	function ToolbarObj.SetDirty(Dirty: boolean)
 		DirtyIndicator.Text = if Dirty then "*" else ""
 	end
 
-	function Instance.SetTestEnabled(Enabled: boolean)
+	function ToolbarObj.SetTestEnabled(Enabled: boolean)
 		TestButton.SetEnabled(Enabled)
 	end
 
-	function Instance.Destroy()
+	function ToolbarObj.Destroy()
 		NameInput.Destroy()
 		NewButton.Destroy()
 		LoadButton.Destroy()
@@ -160,7 +160,7 @@ function Toolbar.Create(Config: ToolbarConfig): ToolbarInstance
 		Container:Destroy()
 	end
 
-	return Instance
+	return ToolbarObj
 end
 
 return Toolbar

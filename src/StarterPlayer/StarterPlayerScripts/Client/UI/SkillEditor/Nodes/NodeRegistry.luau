@@ -247,6 +247,17 @@ local NODE_DEFINITIONS: { [string]: Types.NodeDefinition } = {
 			{ Key = "Amount", Label = "Amount", Type = "Number", Default = 5, Min = -50, Max = 50 },
 		},
 	},
+
+	BranchStart = {
+		BlockType = "BranchStart",
+		DisplayName = "Branch Start",
+		Description = "Entry point for this branch. Connect this to the first node in your timeline.",
+		Color = Theme.Colors.NodeBranch,
+		Ports = {
+			{ Name = "Out", Direction = "Output", PortType = "Flow" },
+		},
+		Properties = {},
+	},
 }
 
 function NodeRegistry.Get(BlockType: string): Types.NodeDefinition?

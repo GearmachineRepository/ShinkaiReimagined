@@ -16,6 +16,7 @@ export type CanvasConfig = {
 	Parent: GuiObject?,
 	OnOffsetChanged: ((Offset: Vector2) -> ())?,
 	OnZoomChanged: ((Zoom: number) -> ())?,
+	OnBackgroundClick: (() -> ())?,
 }
 
 export type CanvasInstance = {
@@ -49,7 +50,7 @@ function Canvas.Create(Config: CanvasConfig): CanvasInstance
 	Container.BorderSizePixel = 0
 	Container.ClipsDescendants = true
 
-	local GridBackground: ImageLabel = Instance.new("ImageLabel")
+	local GridBackground = Instance.new("ImageLabel")
 	GridBackground.Name = "Grid"
 	GridBackground.Size = UDim2.fromScale(2, 2)
 	GridBackground.Position = UDim2.fromScale(0, 0)
@@ -62,12 +63,21 @@ function Canvas.Create(Config: CanvasConfig): CanvasInstance
 	GridBackground.ZIndex = 1
 	GridBackground.Parent = Container
 
+	local ClickDetector = Instance.new("TextButton")
+	ClickDetector.Name = "ClickDetector"
+	ClickDetector.Size = UDim2.fromScale(1, 1)
+	ClickDetector.BackgroundTransparency = 1
+	ClickDetector.Text = ""
+	ClickDetector.ZIndex = 2
+	ClickDetector.Parent = Container
+
 	local Content = Instance.new("Frame")
 	Content.Name = "Content"
 	Content.Size = UDim2.fromScale(1, 1)
 	Content.Position = UDim2.fromScale(0.5, 0.5)
 	Content.AnchorPoint = Vector2.new(0.5, 0.5)
 	Content.BackgroundTransparency = 1
+	Content.ZIndex = 3
 	Content.Parent = Container
 
 	local UIScaleObj = Instance.new("UIScale")
@@ -83,6 +93,7 @@ function Canvas.Create(Config: CanvasConfig): CanvasInstance
 	local IsPanning = false
 	local PanStartOffset = Vector2.zero
 	local PanStartMouse = Vector2.zero
+	local ClickStartedOnBackground = false
 
 	local function UpdateContentTransform()
 		Content.Position = UDim2.new(0.5, Offset.X, 0.5, Offset.Y)
@@ -104,6 +115,41 @@ function Canvas.Create(Config: CanvasConfig): CanvasInstance
 
 	table.insert(Connections, Container.MouseLeave:Connect(function()
 		IsMouseOver = false
+	end))
+
+	table.insert(Connections, ClickDetector.InputBegan:Connect(function(Input: InputObject)
+		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+			ClickStartedOnBackground = true
+		end
+	end))
+
+	table.insert(Connections, UserInputService.InputEnded:Connect(function(Input: InputObject)
+		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+			if ClickStartedOnBackground then
+				local MousePos = UserInputService:GetMouseLocation()
+				local GuiInset = GuiService:GetGuiInset()
+				MousePos = MousePos - GuiInset
+
+				local PlayerGui = Container:FindFirstAncestorOfClass("PlayerGui")
+				if PlayerGui then
+					local GuisAtPosition = PlayerGui:GetGuiObjectsAtPosition(MousePos.X, MousePos.Y)
+					local HitBackground = false
+					for _, Gui in GuisAtPosition do
+						if Gui == ClickDetector then
+							HitBackground = true
+							break
+						end
+						if Gui.Active and Gui:IsDescendantOf(Content) then
+							break
+						end
+					end
+					if HitBackground and Config.OnBackgroundClick then
+						Config.OnBackgroundClick()
+					end
+				end
+			end
+			ClickStartedOnBackground = false
+		end
 	end))
 
 	table.insert(Connections, Container.InputBegan:Connect(function(Input: InputObject)
@@ -177,38 +223,38 @@ function Canvas.Create(Config: CanvasConfig): CanvasInstance
 
 	UpdateContentTransform()
 
-	local Instance = {
+	local CanvasObj = {
 		Frame = Container,
 		Content = Content,
 	}
 
-	function Instance.GetOffset(): Vector2
+	function CanvasObj.GetOffset(): Vector2
 		return Offset
 	end
 
-	function Instance.SetOffset(NewOffset: Vector2)
+	function CanvasObj.SetOffset(NewOffset: Vector2)
 		Offset = NewOffset
 		UpdateContentTransform()
 	end
 
-	function Instance.GetZoom(): number
+	function CanvasObj.GetZoom(): number
 		return Zoom
 	end
 
-	function Instance.SetZoom(NewZoom: number)
+	function CanvasObj.SetZoom(NewZoom: number)
 		Zoom = math.clamp(NewZoom, MIN_ZOOM, MAX_ZOOM)
 		UpdateContentTransform()
 	end
 
-	function Instance.WorldToCanvas(WorldPosition: Vector2): Vector2
+	function CanvasObj.WorldToCanvas(WorldPosition: Vector2): Vector2
 		return (WorldPosition * Zoom) + Offset
 	end
 
-	function Instance.CanvasToWorld(CanvasPosition: Vector2): Vector2
+	function CanvasObj.CanvasToWorld(CanvasPosition: Vector2): Vector2
 		return (CanvasPosition - Offset) / Zoom
 	end
 
-	function Instance.Destroy()
+	function CanvasObj.Destroy()
 		for _, Connection in Connections do
 			Connection:Disconnect()
 		end
@@ -216,7 +262,7 @@ function Canvas.Create(Config: CanvasConfig): CanvasInstance
 		Container:Destroy()
 	end
 
-	return Instance
+	return CanvasObj
 end
 
 return Canvas

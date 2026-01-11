@@ -9,7 +9,9 @@ local Types = require(script.Parent.Parent.Types)
 local Canvas = require(script.Parent.Parent.Graph.Canvas)
 local Node = require(script.Parent.Parent.Graph.Node)
 local Wire = require(script.Parent.Parent.Graph.Wire)
+local Comment = require(script.Parent.Parent.Graph.Comment)
 local NodeFactory = require(script.Parent.Parent.Nodes.NodeFactory)
+local NodeRegistry = require(script.Parent.Parent.Nodes.NodeRegistry)
 local Toolbar = require(script.Parent.Toolbar)
 local NodePalette = require(script.Parent.NodePalette)
 local PropertyPanel = require(script.Parent.PropertyPanel)
@@ -48,6 +50,7 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		SelectedNodeId = nil,
 		SelectedBranchId = nil,
 		SelectedWireId = nil,
+		SelectedCommentId = nil,
 		CanvasOffset = Vector2.zero,
 		CanvasZoom = 1,
 		IsDirty = false,
@@ -55,6 +58,7 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 
 	local NodeInstances: { [string]: Node.NodeInstance } = {}
 	local WireInstances: { [string]: Wire.WireInstance } = {}
+	local CommentInstances: { [string]: Comment.CommentInstance } = {}
 	local ConnectionState: {
 		IsConnecting: boolean,
 		FromNodeId: string?,
@@ -204,6 +208,39 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		ConnectionState.PreviewWire = nil
 	end
 
+	local function SelectComment(CommentId: string?)
+		if State.SelectedCommentId and CommentInstances[State.SelectedCommentId] then
+			CommentInstances[State.SelectedCommentId].SetSelected(false)
+		end
+
+		State.SelectedCommentId = CommentId
+
+		if CommentId and CommentInstances[CommentId] then
+			CommentInstances[CommentId].SetSelected(true)
+		end
+	end
+
+	local function SelectNode(NodeId: string?)
+		if State.SelectedCommentId and CommentInstances[State.SelectedCommentId] then
+			CommentInstances[State.SelectedCommentId].SetSelected(false)
+			State.SelectedCommentId = nil
+		end
+
+		if State.SelectedNodeId and NodeInstances[State.SelectedNodeId] then
+			NodeInstances[State.SelectedNodeId].SetSelected(false)
+		end
+
+		State.SelectedNodeId = NodeId
+
+		if NodeId and NodeInstances[NodeId] then
+			NodeInstances[NodeId].SetSelected(true)
+			local NodeData = GetNodeData(NodeId)
+			PropertiesPanel.SetNode(NodeData)
+		else
+			PropertiesPanel.SetNode(nil)
+		end
+	end
+
 	local function DeleteWire(WireId: string)
 		local Branch = GetCurrentBranch()
 		if not Branch then
@@ -275,20 +312,64 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		MarkDirty()
 	end
 
-	local function SelectNode(NodeId: string?)
-		if State.SelectedNodeId and NodeInstances[State.SelectedNodeId] then
-			NodeInstances[State.SelectedNodeId].SetSelected(false)
+	local function DeleteComment(CommentId: string)
+		local Branch = GetCurrentBranch()
+		if not Branch or not Branch.Comments then
+			return
 		end
 
-		State.SelectedNodeId = NodeId
-
-		if NodeId and NodeInstances[NodeId] then
-			NodeInstances[NodeId].SetSelected(true)
-			local NodeData = GetNodeData(NodeId)
-			PropertiesPanel.SetNode(NodeData)
-		else
-			PropertiesPanel.SetNode(nil)
+		local CommentUI = CommentInstances[CommentId]
+		if CommentUI then
+			CommentUI.Destroy()
+			CommentInstances[CommentId] = nil
 		end
+
+		for Index, CommentData in Branch.Comments do
+			if CommentData.CommentId == CommentId then
+				table.remove(Branch.Comments, Index)
+				break
+			end
+		end
+
+		if State.SelectedCommentId == CommentId then
+			State.SelectedCommentId = nil
+		end
+
+		MarkDirty()
+	end
+
+	local function CreateCommentUI(CommentData: Types.CommentData)
+		local CommentUI = Comment.Create({
+			CommentId = CommentData.CommentId,
+			Title = CommentData.Title,
+			Text = CommentData.Text,
+			Color = CommentData.Color,
+			Position = CommentData.Position,
+			Size = CommentData.Size,
+			Parent = CanvasInstance.Content,
+			OnSelected = function(CommentId: string)
+				SelectNode(nil)
+				SelectComment(CommentId)
+			end,
+			OnMoved = function(_CommentId: string, Position: Vector2)
+				CommentData.Position = Position
+				MarkDirty()
+			end,
+			OnResized = function(_CommentId: string, Size: Vector2)
+				CommentData.Size = Size
+				MarkDirty()
+			end,
+			OnTitleChanged = function(_CommentId: string, Title: string)
+				CommentData.Title = Title
+				MarkDirty()
+			end,
+			OnTextChanged = function(_CommentId: string, Text: string)
+				CommentData.Text = Text
+				MarkDirty()
+			end,
+		})
+
+		CommentInstances[CommentData.CommentId] = CommentUI
 	end
 
 	local function CreateNodeUI(NodeData: Types.NodeInstance)
@@ -326,7 +407,42 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 					return
 				end
 
+				local ToNodeData = GetNodeData(NodeId)
+				if not ToNodeData then
+					CancelConnection()
+					return
+				end
+
+				local ToPortDirection: Types.PortDirection? = nil
+				local ToPortType: Types.PortType? = nil
+				local ToDefinition = NodeRegistry.Get(ToNodeData.BlockType)
+				if ToDefinition then
+					for _, PortDef in ToDefinition.Ports do
+						if PortDef.Name == PortName then
+							ToPortDirection = PortDef.Direction
+							ToPortType = PortDef.PortType
+							break
+						end
+					end
+				end
+
+				if not ToPortDirection then
+					CancelConnection()
+					return
+				end
+
 				local FromDirection = ConnectionState.FromDirection
+				if FromDirection == ToPortDirection then
+					CancelConnection()
+					return
+				end
+
+				local FromPortType = ConnectionState.FromPortType
+				if FromPortType ~= ToPortType then
+					CancelConnection()
+					return
+				end
+
 				local FromNodeId = ConnectionState.FromNodeId :: string
 				local FromPortName = ConnectionState.FromPortName :: string
 				local ToNodeId = NodeId
@@ -383,7 +499,13 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		end
 		table.clear(WireInstances)
 
+		for _, CommentUI in CommentInstances do
+			CommentUI.Destroy()
+		end
+		table.clear(CommentInstances)
+
 		SelectNode(nil)
+		SelectComment(nil)
 		SpawnCounter = 0
 	end
 
@@ -393,6 +515,12 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		local Branch = State.Branches[BranchId]
 		if not Branch then
 			return
+		end
+
+		if Branch.Comments then
+			for _, CommentData in Branch.Comments do
+				CreateCommentUI(CommentData)
+			end
 		end
 
 		for _, NodeData in Branch.Nodes do
@@ -433,6 +561,7 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 			IsEntry = IsEntry,
 			Nodes = {},
 			Wires = {},
+			Comments = {},
 			Position = Vector2.zero,
 			Collapsed = false,
 		}
@@ -484,7 +613,43 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		return CanvasCenter + Vector2.new(OffsetX - 200, OffsetY - 100)
 	end
 
+	local function AddComment()
+		local Branch = GetCurrentBranch()
+		if not Branch then
+			local BranchId = CreateBranch("Main")
+			SelectBranch(BranchId)
+			Branch = State.Branches[BranchId]
+		end
+		if not Branch then
+			return
+		end
+
+		local Comments = Branch.Comments or {}
+
+		local SpawnPosition = GetSpawnPosition()
+
+		local CommentData: Types.CommentData = {
+			CommentId = HttpService:GenerateGUID(false),
+			Title = "Comment",
+			Text = "",
+			Color = Comment.DefaultColor,
+			Position = SpawnPosition,
+			Size = Vector2.new(300, 150),
+		}
+
+		table.insert(Comments, CommentData)
+		CreateCommentUI(CommentData)
+		SelectNode(nil)
+		SelectComment(CommentData.CommentId)
+		MarkDirty()
+	end
+
 	local function AddNodeToBranch(BlockType: string)
+		if BlockType == "Comment" then
+			AddComment()
+			return
+		end
+
 		local Branch = GetCurrentBranch()
 		if not Branch then
 			local BranchId = CreateBranch("Main")
@@ -530,11 +695,25 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		end
 	end))
 
+	table.insert(EditorConnections, UserInputService.InputBegan:Connect(function(Input: InputObject, GameProcessed: boolean)
+		if GameProcessed then
+			return
+		end
+		if Input.KeyCode == Enum.KeyCode.Delete or Input.KeyCode == Enum.KeyCode.Backspace then
+			if State.SelectedCommentId then
+				DeleteComment(State.SelectedCommentId)
+			elseif State.SelectedNodeId then
+				DeleteNode(State.SelectedNodeId)
+			end
+		end
+	end))
+
 	local function ResetToNewSkill()
 		State.SkillId = ""
 		State.DisplayName = "New Skill"
 		State.Branches = {}
 		State.IsDirty = false
+		State.SelectedCommentId = nil
 		ToolbarPanel.SetSkillName("New Skill")
 		ToolbarPanel.SetDirty(false)
 		BranchListPanel.SetBranches({})
@@ -574,10 +753,7 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		end,
 		OnLoad = function()
 			local function ShowLoadModal()
-				local SkillsList = {}
-				if Config.GetSkillsList then
-					SkillsList = Config.GetSkillsList()
-				end
+				local SkillsList = if Config.GetSkillsList then Config.GetSkillsList() else {}
 
 				Modal.Select({
 					Title = "Load Skill",
@@ -585,9 +761,9 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 					Parent = Container,
 					OnSelected = function(SkillId: string)
 						if Config.OnLoad then
-							local SkillData = Config.OnLoad(SkillId)
-							if SkillData then
-								EditorInstance.LoadSkill(SkillData)
+							local LoadedData = Config.OnLoad(SkillId)
+							if LoadedData then
+								EditorInstance.LoadSkill(LoadedData)
 								Notification.Success("Skill loaded!", Container)
 							else
 								Notification.Error("Failed to load skill.", Container)
@@ -638,6 +814,11 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		Position = UDim2.fromOffset(Theme.Sizes.PanelWidth, 0),
 		GridImage = if Theme.Assets.GridImage ~= "" then Theme.Assets.GridImage else nil,
 		Parent = ContentArea,
+		OnBackgroundClick = function()
+			SelectNode(nil)
+			SelectComment(nil)
+			CancelConnection()
+		end,
 	})
 
 	PalettePanel = NodePalette.Create({
@@ -705,6 +886,7 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		State.DisplayName = "New Skill"
 		State.Branches = {}
 		State.IsDirty = false
+		State.SelectedCommentId = nil
 		ToolbarPanel.SetSkillName("New Skill")
 		ToolbarPanel.SetDirty(false)
 		BranchListPanel.SetBranches({})
@@ -779,6 +961,69 @@ local function DeserializeWires(SerializedWires: { any }?): { Types.WireInstance
 	return Wires
 end
 
+local function SerializeComments(Comments: { Types.CommentData }?): { any }?
+	if not Comments or #Comments == 0 then
+		return nil
+	end
+
+	local SerializedComments = {}
+	for _, CommentData in Comments do
+		table.insert(SerializedComments, {
+			CommentId = CommentData.CommentId,
+			Title = CommentData.Title,
+			Text = CommentData.Text,
+			Color = {
+				R = CommentData.Color.R,
+				G = CommentData.Color.G,
+				B = CommentData.Color.B,
+			},
+			Position = {
+				X = CommentData.Position.X,
+				Y = CommentData.Position.Y,
+			},
+			Size = {
+				X = CommentData.Size.X,
+				Y = CommentData.Size.Y,
+			},
+		})
+	end
+	return SerializedComments
+end
+
+local function DeserializeComments(SerializedComments: { any }?): { Types.CommentData }
+	if not SerializedComments then
+		return {}
+	end
+
+	local Comments: { Types.CommentData } = {}
+	for _, Data in SerializedComments do
+		local Color = Comment.DefaultColor
+		if Data.Color then
+			Color = Color3.new(Data.Color.R or 0, Data.Color.G or 0, Data.Color.B or 0)
+		end
+
+		local Position = Vector2.zero
+		if Data.Position then
+			Position = Vector2.new(Data.Position.X or 0, Data.Position.Y or 0)
+		end
+
+		local Size = Vector2.new(300, 150)
+		if Data.Size then
+			Size = Vector2.new(Data.Size.X or 300, Data.Size.Y or 150)
+		end
+
+		table.insert(Comments, {
+			CommentId = Data.CommentId or HttpService:GenerateGUID(false),
+			Title = Data.Title or "Comment",
+			Text = Data.Text or "",
+			Color = Color,
+			Position = Position,
+			Size = Size,
+		})
+	end
+	return Comments
+end
+
 function EditorWindow.ImportSkillData(SkillData: any): Types.EditorState
 	local State: Types.EditorState = {
 		SkillId = SkillData.SkillId or "",
@@ -787,6 +1032,7 @@ function EditorWindow.ImportSkillData(SkillData: any): Types.EditorState
 		SelectedNodeId = nil,
 		SelectedBranchId = nil,
 		SelectedWireId = nil,
+		SelectedCommentId = nil,
 		CanvasOffset = Vector2.zero,
 		CanvasZoom = 1,
 		IsDirty = false,
@@ -794,6 +1040,7 @@ function EditorWindow.ImportSkillData(SkillData: any): Types.EditorState
 
 	local EditorData = SkillData.EditorData or {}
 	local EditorWires = EditorData.Wires or {}
+	local EditorComments = EditorData.Comments or {}
 
 	if SkillData.Timeline then
 		local BranchId = HttpService:GenerateGUID(false)
@@ -808,6 +1055,7 @@ function EditorWindow.ImportSkillData(SkillData: any): Types.EditorState
 		end
 
 		local BranchWires = DeserializeWires(EditorWires["Main"] or EditorWires[1])
+		local BranchComments = DeserializeComments(EditorComments["Main"])
 
 		State.Branches[BranchId] = {
 			BranchId = BranchId,
@@ -815,6 +1063,7 @@ function EditorWindow.ImportSkillData(SkillData: any): Types.EditorState
 			IsEntry = true,
 			Nodes = Nodes,
 			Wires = BranchWires,
+			Comments = BranchComments,
 			Position = Vector2.zero,
 		}
 	elseif SkillData.Branches then
@@ -833,6 +1082,7 @@ function EditorWindow.ImportSkillData(SkillData: any): Types.EditorState
 			end
 
 			local BranchWires = DeserializeWires(EditorWires[BranchName])
+			local BranchComments = DeserializeComments(EditorComments[BranchName])
 
 			State.Branches[BranchId] = {
 				BranchId = BranchId,
@@ -840,6 +1090,7 @@ function EditorWindow.ImportSkillData(SkillData: any): Types.EditorState
 				IsEntry = BranchData.Entry == true,
 				Nodes = Nodes,
 				Wires = BranchWires,
+				Comments = BranchComments,
 				Position = Vector2.zero,
 			}
 		end
@@ -861,6 +1112,7 @@ function EditorWindow.ExportSkillData(State: Types.EditorState): any
 	end
 
 	local EditorWires: { [string]: any } = {}
+	local EditorComments: { [string]: any } = {}
 
 	if BranchCount == 1 then
 		for _, Branch in State.Branches do
@@ -872,6 +1124,7 @@ function EditorWindow.ExportSkillData(State: Types.EditorState): any
 				end
 				SkillData.Timeline = Timeline
 				EditorWires["Main"] = SerializeWires(Branch.Wires)
+				EditorComments["Main"] = SerializeComments(Branch.Comments)
 				break
 			end
 		end
@@ -888,11 +1141,13 @@ function EditorWindow.ExportSkillData(State: Types.EditorState): any
 				Timeline = Timeline,
 			}
 			EditorWires[Branch.BranchName] = SerializeWires(Branch.Wires)
+			EditorComments[Branch.BranchName] = SerializeComments(Branch.Comments)
 		end
 	end
 
 	SkillData.EditorData = {
 		Wires = EditorWires,
+		Comments = EditorComments,
 	}
 
 	return SkillData

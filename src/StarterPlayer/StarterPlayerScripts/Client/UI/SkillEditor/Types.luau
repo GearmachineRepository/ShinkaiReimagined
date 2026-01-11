@@ -17,6 +17,7 @@ export type PortDefinition = {
 export type NodeDefinition = {
 	BlockType: string,
 	DisplayName: string,
+	Description: string?,
 	Color: Color3,
 	Icon: string?,
 	Ports: { PortDefinition },
@@ -33,6 +34,7 @@ export type PropertyDefinition = {
 	Min: number?,
 	Max: number?,
 	Options: { string }?,
+	Tooltip: string?,
 }
 
 export type NodeInstance = {
@@ -52,12 +54,22 @@ export type WireInstance = {
 	WireType: PortType,
 }
 
+export type CommentData = {
+	CommentId: string,
+	Title: string,
+	Text: string,
+	Color: Color3,
+	Position: Vector2,
+	Size: Vector2,
+}
+
 export type BranchData = {
 	BranchId: string,
 	BranchName: string,
 	IsEntry: boolean,
 	Nodes: { NodeInstance },
 	Wires: { WireInstance },
+	Comments: { CommentData }?,
 	Position: Vector2,
 	Collapsed: boolean?,
 }
@@ -69,6 +81,7 @@ export type EditorState = {
 	SelectedNodeId: string?,
 	SelectedBranchId: string?,
 	SelectedWireId: string?,
+	SelectedCommentId: string?,
 	CanvasOffset: Vector2,
 	CanvasZoom: number,
 	IsDirty: boolean,

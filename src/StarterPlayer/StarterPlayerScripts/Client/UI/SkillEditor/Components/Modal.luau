@@ -37,7 +37,7 @@ function Modal.Create(Config: ModalConfig): ModalInstance
 	local Overlay = Instance.new("TextButton")
 	Overlay.Name = "ModalOverlay"
 	Overlay.Size = UDim2.fromScale(1, 1)
-	Overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	Overlay.BackgroundColor3 = Theme.Colors.Overlay
 	Overlay.BackgroundTransparency = 1
 	Overlay.Text = ""
 	Overlay.AutoButtonColor = false
@@ -237,7 +237,7 @@ function Modal.Select(Config: SelectConfig): SelectModalInstance
 	local Overlay = Instance.new("TextButton")
 	Overlay.Name = "ModalOverlay"
 	Overlay.Size = UDim2.fromScale(1, 1)
-	Overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	Overlay.BackgroundColor3 = Theme.Colors.Overlay
 	Overlay.BackgroundTransparency = 1
 	Overlay.Text = ""
 	Overlay.AutoButtonColor = false

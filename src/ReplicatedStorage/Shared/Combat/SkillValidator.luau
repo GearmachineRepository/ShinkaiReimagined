@@ -11,9 +11,11 @@ local SkillValidator = {}
 local MAX_BLOCKS = 50
 local MAX_BRANCHES = 10
 local MAX_SIGNAL_LENGTH = 32
+local MAX_ID_LENGTH = 64
 local MAX_DAMAGE = 100
 local MAX_STUN = 5
 local MAX_WAIT = 10
+local MAX_COMMENTS = 50
 
 local ALLOWED_BLOCK_TYPES: { [string]: boolean } = {}
 for BlockType in pairs(Enums.Combat.BlockType) do
@@ -74,8 +76,7 @@ local function ValidateBlock(Block: any): any?
         BlockType = BlockType,
     }
 
-    Clean.BlockId = ValidateString(Block.BlockId, MAX_SIGNAL_LENGTH)
-
+    Clean.BlockId = ValidateString(Block.BlockId, MAX_ID_LENGTH)
     Clean.EditorPosition = ValidateEditorPosition(Block.EditorPosition)
 
     if Block.RequireSignal then
@@ -246,10 +247,10 @@ local function ValidateWire(Wire: any): any?
         return nil
     end
 
-    local WireId = ValidateString(Wire.WireId, 64)
-    local FromNodeId = ValidateString(Wire.FromNodeId, 64)
+    local WireId = ValidateString(Wire.WireId, MAX_ID_LENGTH)
+    local FromNodeId = ValidateString(Wire.FromNodeId, MAX_ID_LENGTH)
     local FromPortName = ValidateString(Wire.FromPortName, 32)
-    local ToNodeId = ValidateString(Wire.ToNodeId, 64)
+    local ToNodeId = ValidateString(Wire.ToNodeId, MAX_ID_LENGTH)
     local ToPortName = ValidateString(Wire.ToPortName, 32)
     local WireType = ValidateString(Wire.WireType, 16)
 
@@ -264,6 +265,53 @@ local function ValidateWire(Wire: any): any?
         ToNodeId = ToNodeId,
         ToPortName = ToPortName,
         WireType = WireType or "Flow",
+    }
+end
+
+local function ValidateComment(CommentData: any): any?
+    if type(CommentData) ~= "table" then
+        return nil
+    end
+
+    local CommentId = ValidateString(CommentData.CommentId, MAX_ID_LENGTH)
+    if not CommentId then
+        return nil
+    end
+
+    local Title = ValidateString(CommentData.Title, 64) or "Comment"
+    local Text = CommentData.Text
+    if type(Text) ~= "string" then
+        Text = ""
+    elseif #Text > 1000 then
+        Text = string.sub(Text, 1, 1000)
+    end
+
+    local Color = { R = 0.3, G = 0.78, B = 0.63 }
+    if type(CommentData.Color) == "table" then
+        Color.R = ValidateNumber(CommentData.Color.R, 0, 1, 0.3) or 0.3
+        Color.G = ValidateNumber(CommentData.Color.G, 0, 1, 0.78) or 0.78
+        Color.B = ValidateNumber(CommentData.Color.B, 0, 1, 0.63) or 0.63
+    end
+
+    local Position = { X = 0, Y = 0 }
+    if type(CommentData.Position) == "table" then
+        Position.X = ValidateNumber(CommentData.Position.X, -10000, 10000, 0) or 0
+        Position.Y = ValidateNumber(CommentData.Position.Y, -10000, 10000, 0) or 0
+    end
+
+    local Size = { X = 300, Y = 150 }
+    if type(CommentData.Size) == "table" then
+        Size.X = ValidateNumber(CommentData.Size.X, 150, 2000, 300) or 300
+        Size.Y = ValidateNumber(CommentData.Size.Y, 80, 2000, 150) or 150
+    end
+
+    return {
+        CommentId = CommentId,
+        Title = Title,
+        Text = Text,
+        Color = Color,
+        Position = Position,
+        Size = Size,
     }
 end
 
@@ -288,6 +336,28 @@ local function ValidateEditorData(EditorData: any): any?
                 end
                 if #ValidWires > 0 then
                     Clean.Wires[ValidBranchName] = ValidWires
+                end
+            end
+        end
+    end
+
+    if type(EditorData.Comments) == "table" then
+        Clean.Comments = {}
+        for BranchName, BranchComments in EditorData.Comments do
+            local ValidBranchName = ValidateString(BranchName, 32)
+            if ValidBranchName and type(BranchComments) == "table" then
+                local ValidComments = {}
+                for _, CommentData in BranchComments do
+                    if #ValidComments >= MAX_COMMENTS then
+                        break
+                    end
+                    local ValidComment = ValidateComment(CommentData)
+                    if ValidComment then
+                        table.insert(ValidComments, ValidComment)
+                    end
+                end
+                if #ValidComments > 0 then
+                    Clean.Comments[ValidBranchName] = ValidComments
                 end
             end
         end
