@@ -87,10 +87,8 @@ function WireSnapDetector.UpdateSnapState(NewTarget: SnapTarget?)
 	local IsNowSnapped = NewTarget ~= nil
 	local TargetChanged = false
 
-	if not NewTarget then return end
-
 	if IsNowSnapped and WasSnapped then
-		if OldTarget then
+		if OldTarget and NewTarget then
 			TargetChanged = NewTarget.NodeId ~= OldTarget.NodeId or NewTarget.PortName ~= OldTarget.PortName
 		else
 			TargetChanged = true

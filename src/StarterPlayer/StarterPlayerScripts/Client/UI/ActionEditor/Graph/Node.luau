@@ -244,14 +244,15 @@ function Node.Create(Config: NodeConfig): NodeInstance
 
 	local PropertyContainer: Frame? = nil
 	if StandalonePropertyCount > 0 then
-		PropertyContainer = Instance.new("Frame")
-		PropertyContainer.Name = "Properties"
-		PropertyContainer.Size = UDim2.new(1, -8, 0, StandalonePropertyCount * ROW_HEIGHT)
-		PropertyContainer.Position = UDim2.fromOffset(4, Theme.Sizes.NodeHeaderHeight + 2 + (MaxPortRows * ROW_HEIGHT) + 4)
-		PropertyContainer.BackgroundTransparency = 1
-		PropertyContainer.ZIndex = Theme.ZIndex.NodeContent
-		PropertyContainer.ClipsDescendants = false
-		PropertyContainer.Parent = Container
+		local NewPropertyContainer = Instance.new("Frame")
+		NewPropertyContainer.Name = "Properties"
+		NewPropertyContainer.Size = UDim2.new(1, -8, 0, StandalonePropertyCount * ROW_HEIGHT)
+		NewPropertyContainer.Position = UDim2.fromOffset(4, Theme.Sizes.NodeHeaderHeight + 2 + (MaxPortRows * ROW_HEIGHT) + 4)
+		NewPropertyContainer.BackgroundTransparency = 1
+		NewPropertyContainer.ZIndex = Theme.ZIndex.NodeContent
+		NewPropertyContainer.ClipsDescendants = false
+		NewPropertyContainer.Parent = Container
+		PropertyContainer = NewPropertyContainer
 
 		local PropLayout = Instance.new("UIListLayout")
 		PropLayout.FillDirection = Enum.FillDirection.Vertical

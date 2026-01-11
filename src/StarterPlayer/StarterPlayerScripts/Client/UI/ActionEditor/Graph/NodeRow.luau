@@ -80,15 +80,16 @@ function NodeRow.Create(Config: RowConfig): RowInstance
 	local ClickDetector: TextButton? = nil
 
 	if Config.RowType == "InputPort" or Config.RowType == "OutputPort" then
-		PortCircle = Instance.new("Frame")
-		PortCircle.Name = "Circle"
-		PortCircle.Size = UDim2.fromOffset(PORT_RADIUS * 2, PORT_RADIUS * 2)
-		PortCircle.BackgroundColor3 = PortColor
-		PortCircle.BorderSizePixel = 0
-		PortCircle.ZIndex = CurrentZIndex + 2
-		PortCircle.Parent = Container
+		local NewPortCircle = Instance.new("Frame")
+		NewPortCircle.Name = "Circle"
+		NewPortCircle.Size = UDim2.fromOffset(PORT_RADIUS * 2, PORT_RADIUS * 2)
+		NewPortCircle.BackgroundColor3 = PortColor
+		NewPortCircle.BorderSizePixel = 0
+		NewPortCircle.ZIndex = CurrentZIndex + 2
+		NewPortCircle.Parent = Container
+		PortCircle = NewPortCircle
 
-		Theme.ApplyCorner(PortCircle, UDim.new(0.5, 0))
+		Theme.ApplyCorner(NewPortCircle, UDim.new(0.5, 0))
 
 		local InnerCircle = Instance.new("Frame")
 		InnerCircle.Name = "InnerCircle"
@@ -104,46 +105,47 @@ function NodeRow.Create(Config: RowConfig): RowInstance
 
 		local HalfRadius = PORT_RADIUS / 2
 		if Direction == "Input" then
-			PortCircle.Position = UDim2.new(0, -HalfRadius, 0.5, 0)
-			PortCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+			NewPortCircle.Position = UDim2.new(0, -HalfRadius, 0.5, 0)
+			NewPortCircle.AnchorPoint = Vector2.new(0.5, 0.5)
 		else
-			PortCircle.Position = UDim2.new(1, HalfRadius, 0.5, 0)
-			PortCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+			NewPortCircle.Position = UDim2.new(1, HalfRadius, 0.5, 0)
+			NewPortCircle.AnchorPoint = Vector2.new(0.5, 0.5)
 		end
 
-		ClickDetector = Instance.new("TextButton")
-		ClickDetector.Name = "PortClick"
-		ClickDetector.Size = UDim2.fromOffset(24, ROW_HEIGHT)
-		ClickDetector.BackgroundTransparency = 1
-		ClickDetector.Text = ""
-		ClickDetector.ZIndex = CurrentZIndex + 5
+		local NewClickDetector = Instance.new("TextButton")
+		NewClickDetector.Name = "PortClick"
+		NewClickDetector.Size = UDim2.fromOffset(24, ROW_HEIGHT)
+		NewClickDetector.BackgroundTransparency = 1
+		NewClickDetector.Text = ""
+		NewClickDetector.ZIndex = CurrentZIndex + 5
+		ClickDetector = NewClickDetector
 
 		if Direction == "Input" then
-			ClickDetector.Position = UDim2.fromOffset(-PORT_RADIUS - 6, 0)
+			NewClickDetector.Position = UDim2.fromOffset(-PORT_RADIUS - 6, 0)
 		else
-			ClickDetector.Position = UDim2.new(1, -12, 0, 0)
+			NewClickDetector.Position = UDim2.new(1, -12, 0, 0)
 		end
-		ClickDetector.Parent = Container
+		NewClickDetector.Parent = Container
 
-		table.insert(Connections, ClickDetector.MouseButton1Down:Connect(function()
+		table.insert(Connections, NewClickDetector.MouseButton1Down:Connect(function()
 			if Config.OnConnectionStart and Config.PortName and Config.PortType then
 				Config.OnConnectionStart(Config.NodeId, Config.PortName, Config.PortType, Direction :: Types.PortDirection)
 			end
 		end))
 
-		table.insert(Connections, ClickDetector.MouseButton1Up:Connect(function()
+		table.insert(Connections, NewClickDetector.MouseButton1Up:Connect(function()
 			if Config.OnConnectionEnd and Config.PortName then
 				Config.OnConnectionEnd(Config.NodeId, Config.PortName)
 			end
 		end))
 
-		table.insert(Connections, ClickDetector.MouseEnter:Connect(function()
+		table.insert(Connections, NewClickDetector.MouseEnter:Connect(function()
 			if PortCircle then
 				PortCircle.Size = UDim2.fromOffset(PORT_RADIUS * 2.5, PORT_RADIUS * 2.5)
 			end
 		end))
 
-		table.insert(Connections, ClickDetector.MouseLeave:Connect(function()
+		table.insert(Connections, NewClickDetector.MouseLeave:Connect(function()
 			if PortCircle then
 				PortCircle.Size = UDim2.fromOffset(PORT_RADIUS * 2, PORT_RADIUS * 2)
 			end
@@ -174,27 +176,28 @@ function NodeRow.Create(Config: RowConfig): RowInstance
 	local ControlContainer: Frame? = nil
 
 	if Config.RowType == "InputPort" and HasInlineProperty then
-		ControlContainer = Instance.new("Frame")
-		ControlContainer.Name = "ControlContainer"
-		ControlContainer.Size = UDim2.new(1, 0, 1, 0)
-		ControlContainer.Position = UDim2.fromScale(0, 0)
-		ControlContainer.BackgroundTransparency = 1
-		ControlContainer.ZIndex = CurrentZIndex
-		ControlContainer.Parent = ContentArea
+		local NewControlContainer = Instance.new("Frame")
+		NewControlContainer.Name = "ControlContainer"
+		NewControlContainer.Size = UDim2.fromScale(1, 1)
+		NewControlContainer.Position = UDim2.fromScale(0, 0)
+		NewControlContainer.BackgroundTransparency = 1
+		NewControlContainer.ZIndex = CurrentZIndex
+		NewControlContainer.Parent = ContentArea
+		ControlContainer = NewControlContainer
 
-		WiredIndicator = Instance.new("TextLabel")
-		WiredIndicator.Name = "WiredIndicator"
-		WiredIndicator.Size = UDim2.new(1, 0, 1, 0)
-		WiredIndicator.Position = UDim2.fromScale(0, 0)
-		WiredIndicator.BackgroundTransparency = 1
-		WiredIndicator.Text = "← " .. (Config.PropertyDef and Config.PropertyDef.Label or Config.PortName or "")
-		WiredIndicator.TextColor3 = Theme.Colors.TextMuted
-		WiredIndicator.FontFace = Theme.Fonts.Default
-		WiredIndicator.TextSize = Theme.TextSizes.Small
-		WiredIndicator.TextXAlignment = Enum.TextXAlignment.Left
-		WiredIndicator.ZIndex = CurrentZIndex + 1
-		WiredIndicator.Visible = false
-		WiredIndicator.Parent = ContentArea
+		local NewWiredIndicator = Instance.new("TextLabel")
+		NewWiredIndicator.Name = "WiredIndicator"
+		NewWiredIndicator.Size = UDim2.fromScale(1, 1)
+		NewWiredIndicator.Position = UDim2.fromScale(0, 0)
+		NewWiredIndicator.BackgroundTransparency = 1
+		NewWiredIndicator.Text = "← " .. (Config.PropertyDef and Config.PropertyDef.Label or Config.PortName or "")
+		NewWiredIndicator.TextColor3 = Theme.Colors.TextMuted
+		NewWiredIndicator.FontFace = Theme.Fonts.Default
+		NewWiredIndicator.TextSize = Theme.TextSizes.Small
+		NewWiredIndicator.TextXAlignment = Enum.TextXAlignment.Left
+		NewWiredIndicator.ZIndex = CurrentZIndex + 1
+		NewWiredIndicator.Visible = false
+		NewWiredIndicator.Parent = ContentArea
 
 		if Config.PropertyDef and Config.OnPropertyChanged then
 			InlineControl = InlineControls.Create({
@@ -206,35 +209,37 @@ function NodeRow.Create(Config: RowConfig): RowInstance
 						Config.OnPropertyChanged(Config.PropertyDef.Key, NewValue)
 					end
 				end,
-				Parent = ControlContainer,
+				Parent = NewControlContainer,
 				ZIndex = CurrentZIndex + 1,
 				Disabled = IsWired,
 			})
 		end
 
 	elseif Config.RowType == "OutputPort" then
-		Label = Instance.new("TextLabel")
-		Label.Name = "Label"
-		Label.Size = UDim2.new(1, -4, 1, 0)
-		Label.Position = UDim2.fromOffset(0, 0)
-		Label.BackgroundTransparency = 1
-		Label.Text = Config.PortName or ""
-		Label.TextColor3 = Theme.Colors.Text
-		Label.FontFace = Theme.Fonts.Default
-		Label.TextSize = Theme.TextSizes.Small
-		Label.TextXAlignment = Enum.TextXAlignment.Right
-		Label.TextTruncate = Enum.TextTruncate.AtEnd
-		Label.ZIndex = CurrentZIndex + 1
-		Label.Parent = ContentArea
+		local NewLabel = Instance.new("TextLabel")
+		NewLabel.Name = "Label"
+		NewLabel.Size = UDim2.new(1, -4, 1, 0)
+		NewLabel.Position = UDim2.fromOffset(0, 0)
+		NewLabel.BackgroundTransparency = 1
+		NewLabel.Text = Config.PortName or ""
+		NewLabel.TextColor3 = Theme.Colors.Text
+		NewLabel.FontFace = Theme.Fonts.Default
+		NewLabel.TextSize = Theme.TextSizes.Small
+		NewLabel.TextXAlignment = Enum.TextXAlignment.Right
+		NewLabel.TextTruncate = Enum.TextTruncate.AtEnd
+		NewLabel.ZIndex = CurrentZIndex + 1
+		NewLabel.Parent = ContentArea
+		Label = NewLabel
 
 	elseif Config.RowType == "PropertyOnly" and Config.PropertyDef then
-		ControlContainer = Instance.new("Frame")
-		ControlContainer.Name = "ControlContainer"
-		ControlContainer.Size = UDim2.new(1, 0, 1, 0)
-		ControlContainer.Position = UDim2.fromScale(0, 0)
-		ControlContainer.BackgroundTransparency = 1
-		ControlContainer.ZIndex = CurrentZIndex
-		ControlContainer.Parent = ContentArea
+		local NewControlContainer = Instance.new("Frame")
+		NewControlContainer.Name = "ControlContainer"
+		NewControlContainer.Size = UDim2.fromScale(1, 1)
+		NewControlContainer.Position = UDim2.fromScale(0, 0)
+		NewControlContainer.BackgroundTransparency = 1
+		NewControlContainer.ZIndex = CurrentZIndex
+		NewControlContainer.Parent = ContentArea
+		ControlContainer = NewControlContainer
 
 		if Config.OnPropertyChanged then
 			InlineControl = InlineControls.Create({
@@ -246,25 +251,25 @@ function NodeRow.Create(Config: RowConfig): RowInstance
 						Config.OnPropertyChanged(Config.PropertyDef.Key, NewValue)
 					end
 				end,
-				Parent = ControlContainer,
+				Parent = NewControlContainer,
 				ZIndex = CurrentZIndex + 1,
 			})
 		end
 
 	elseif Config.RowType == "InputPort" then
-		Label = Instance.new("TextLabel")
-		Label.Name = "Label"
-		Label.Size = UDim2.new(1, -4, 1, 0)
-		Label.Position = UDim2.fromOffset(0, 0)
-		Label.BackgroundTransparency = 1
-		Label.Text = Config.PortName or ""
-		Label.TextColor3 = Theme.Colors.Text
-		Label.FontFace = Theme.Fonts.Default
-		Label.TextSize = Theme.TextSizes.Small
-		Label.TextXAlignment = Enum.TextXAlignment.Left
-		Label.TextTruncate = Enum.TextTruncate.AtEnd
-		Label.ZIndex = CurrentZIndex + 1
-		Label.Parent = ContentArea
+		local NewLabel = Instance.new("TextLabel")
+		NewLabel.Name = "Label"
+		NewLabel.Size = UDim2.new(1, -4, 1, 0)
+		NewLabel.Position = UDim2.fromOffset(0, 0)
+		NewLabel.BackgroundTransparency = 1
+		NewLabel.Text = Config.PortName or ""
+		NewLabel.TextColor3 = Theme.Colors.Text
+		NewLabel.FontFace = Theme.Fonts.Default
+		NewLabel.TextSize = Theme.TextSizes.Small
+		NewLabel.TextXAlignment = Enum.TextXAlignment.Left
+		NewLabel.TextTruncate = Enum.TextTruncate.AtEnd
+		NewLabel.ZIndex = CurrentZIndex + 1
+		NewLabel.Parent = ContentArea
 	end
 
 	if Config.Parent then

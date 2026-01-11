@@ -152,8 +152,6 @@ function Wire.Create(Config: WireConfig): WireInstance
 		PlusIndicator = CreatePlusIndicator(Container, Theme.ZIndex.Wire)
 	end
 
-	local LastEndPosition = Vector2.zero
-
 	local function SmoothStep(Alpha: number): number
 		local Clamped = math.clamp(Alpha, 0, 1)
 		return Clamped * Clamped * (3 - 2 * Clamped)
@@ -350,8 +348,6 @@ function Wire.Create(Config: WireConfig): WireInstance
 	end
 
 	local function RenderBezier(P0: Vector2, P3: Vector2)
-		LastEndPosition = P3
-
 		local Delta = P3 - P0
 		local Distance = Delta.Magnitude
 

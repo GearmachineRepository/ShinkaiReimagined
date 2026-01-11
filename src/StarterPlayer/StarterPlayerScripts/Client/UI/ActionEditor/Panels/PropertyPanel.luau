@@ -36,6 +36,7 @@ function PropertyPanel.Create(Config: PropertyPanelConfig): PropertyPanelInstanc
 	local CurrentNode: Types.NodeInstance? = nil
 	local CurrentComment: Types.CommentData? = nil
 	local PropertyInputs: { any } = {}
+	local PropertyInputsByKey: { [string]: any } = {}
 
 	local Container = Panel.Create({
 		Name = "PropertyPanel",
@@ -101,6 +102,7 @@ function PropertyPanel.Create(Config: PropertyPanelConfig): PropertyPanelInstanc
 			end
 		end
 		table.clear(PropertyInputs)
+		table.clear(PropertyInputsByKey)
 	end
 
 	local function CreatePropertyRow(PropertyDef: Types.PropertyDefinition, Value: any, LayoutOrder: number)
@@ -211,6 +213,7 @@ function PropertyPanel.Create(Config: PropertyPanelConfig): PropertyPanelInstanc
 
 		if InputInstance then
 			table.insert(PropertyInputs, InputInstance)
+			PropertyInputsByKey[PropertyDef.Key] = InputInstance
 		end
 		table.insert(PropertyInputs, { Frame = Row })
 	end
@@ -361,6 +364,7 @@ function PropertyPanel.Create(Config: PropertyPanelConfig): PropertyPanelInstanc
 			end,
 		})
 		table.insert(PropertyInputs, TitleInput)
+		PropertyInputsByKey["Title"] = TitleInput
 		table.insert(PropertyInputs, { Frame = TitleRow })
 
 		local TextRow = Instance.new("Frame")
@@ -461,6 +465,7 @@ function PropertyPanel.Create(Config: PropertyPanelConfig): PropertyPanelInstanc
 			end,
 		})
 		table.insert(PropertyInputs, ColorInput)
+		PropertyInputsByKey["Color"] = ColorInput
 		table.insert(PropertyInputs, { Frame = ColorRow })
 
 		local Spacer = Instance.new("Frame")
@@ -493,12 +498,14 @@ function PropertyPanel.Create(Config: PropertyPanelConfig): PropertyPanelInstanc
 	} :: any
 
 	function PanelInstance.RefreshProperty(Key: string, Value: any)
-		for _, Input in PropertyInputs do
-			if Input.Key == Key then
-				if Input.SetValue then
-					Input.SetValue(Value)
-				end
-				break
+		local Input = PropertyInputsByKey[Key]
+		if Input then
+			if Input.SetValue then
+				Input.SetValue(Value)
+			elseif Input.SetText then
+				Input.SetText(tostring(Value or ""))
+			elseif Input.SetSelected then
+				Input.SetSelected(Value)
 			end
 		end
 	end
