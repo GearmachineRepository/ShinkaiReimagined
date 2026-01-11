@@ -2,6 +2,7 @@
 
 local UserInputService = game:GetService("UserInputService")
 
+local DropdownState = require(script.Parent.Parent.State.DropdownState)
 local Theme = require(script.Parent.Parent.Theme)
 local Types = require(script.Parent.Parent.Types)
 
@@ -380,6 +381,8 @@ function InlineControls.CreateDropdown(Config: ControlConfig): ControlInstance
 			DropdownList:Destroy()
 			DropdownList = nil
 		end
+
+		DropdownState.Close()
 		IsOpen = false
 		Arrow.Text = "▼"
 	end
@@ -390,6 +393,7 @@ function InlineControls.CreateDropdown(Config: ControlConfig): ControlInstance
 			return
 		end
 
+		DropdownState.Open()
 		IsOpen = true
 		Arrow.Text = "▲"
 

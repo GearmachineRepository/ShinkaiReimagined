@@ -51,6 +51,8 @@ export type NodeInstance = {
 	Destroy: () -> (),
 }
 
+local ROW_HEIGHT = 22
+
 function Node.Create(Config: NodeConfig): NodeInstance
 	local Position = Config.Position or Vector2.zero
 	local Rows: { [string]: NodeRow.RowInstance } = {}
@@ -61,11 +63,11 @@ function Node.Create(Config: NodeConfig): NodeInstance
 
 	local PortPropertyMap: { [string]: Types.PropertyDefinition } = {}
 	if Config.PropertyDefinitions then
-		for _, PortDef in Config.InputPorts do
-			if PortDef.PropertyKey then
-				for _, PropDef in Config.PropertyDefinitions do
-					if PropDef.Key == PortDef.PropertyKey then
-						PortPropertyMap[PortDef.Name] = PropDef
+		for _, PropDef in Config.PropertyDefinitions do
+			if PropDef.Wireable then
+				for _, InputPort in Config.InputPorts do
+					if InputPort.PropertyKey == PropDef.Key then
+						PortPropertyMap[InputPort.Name] = PropDef
 						break
 					end
 				end
@@ -89,31 +91,22 @@ function Node.Create(Config: NodeConfig): NodeInstance
 		end
 	end
 
-	local InputCount = #Config.InputPorts
-	local OutputCount = #Config.OutputPorts
+	local MaxPortRows = math.max(#Config.InputPorts, #Config.OutputPorts)
 	local StandalonePropertyCount = #PropertiesWithoutPort
-	local MaxPortRows = math.max(InputCount, OutputCount)
-
-	local ROW_HEIGHT = 22
-	local NodeHeight = Theme.Sizes.NodeHeaderHeight + 4
-	NodeHeight = NodeHeight + (MaxPortRows * ROW_HEIGHT)
-	if StandalonePropertyCount > 0 then
-		NodeHeight = NodeHeight + 4 + (StandalonePropertyCount * ROW_HEIGHT)
-	end
-	NodeHeight = NodeHeight + 4
+	local ContentHeight = (MaxPortRows * ROW_HEIGHT) + (StandalonePropertyCount * ROW_HEIGHT)
+	local TotalHeight = Theme.Sizes.NodeHeaderHeight + ContentHeight + 8
 
 	local Container = Instance.new("Frame")
 	Container.Name = "Node_" .. Config.NodeId
-	Container.Size = UDim2.fromOffset(Theme.Sizes.NodeWidth, NodeHeight)
+	Container.Size = UDim2.fromOffset(Theme.Sizes.NodeWidth, TotalHeight)
 	Container.Position = UDim2.fromOffset(Position.X, Position.Y)
 	Container.BackgroundColor3 = Theme.Colors.Surface
 	Container.BorderSizePixel = 0
 	Container.ZIndex = Theme.ZIndex.Node
-	Container.ClipsDescendants = false
 	Container.Active = true
 
 	Theme.ApplyCorner(Container, Theme.Sizes.BorderRadiusSmall)
-	local Stroke = Theme.ApplyStroke(Container, Theme.Colors.Border)
+	local Stroke = Theme.ApplyStroke(Container, Theme.Colors.Border, Theme.StrokeSizes.Deslected)
 
 	local Header = Instance.new("Frame")
 	Header.Name = "Header"
@@ -121,7 +114,6 @@ function Node.Create(Config: NodeConfig): NodeInstance
 	Header.BackgroundColor3 = Config.Color
 	Header.BorderSizePixel = 0
 	Header.ZIndex = Theme.ZIndex.NodeHeader
-	Header.Active = false
 	Header.Parent = Container
 
 	local HeaderCorner = Instance.new("UICorner")
@@ -129,25 +121,24 @@ function Node.Create(Config: NodeConfig): NodeInstance
 	HeaderCorner.Parent = Header
 
 	local HeaderMask = Instance.new("Frame")
-	HeaderMask.Name = "HeaderMask"
+	HeaderMask.Name = "Mask"
 	HeaderMask.Size = UDim2.new(1, 0, 0, 8)
 	HeaderMask.Position = UDim2.new(0, 0, 1, -8)
 	HeaderMask.BackgroundColor3 = Config.Color
 	HeaderMask.BorderSizePixel = 0
 	HeaderMask.ZIndex = Theme.ZIndex.NodeHeader
-	HeaderMask.Active = false
 	HeaderMask.Parent = Header
 
 	local Title = Instance.new("TextLabel")
 	Title.Name = "Title"
-	Title.Size = UDim2.new(1, -16, 1, 0)
-	Title.Position = UDim2.fromOffset(8, 0)
+	Title.Size = UDim2.new(1, -8, 1, 0)
+	Title.Position = UDim2.fromOffset(4, 0)
 	Title.BackgroundTransparency = 1
 	Title.Text = Config.DisplayName
 	Title.TextColor3 = Theme.Colors.Text
 	Title.FontFace = Theme.Fonts.Bold
 	Title.TextSize = Theme.TextSizes.Small
-	Title.TextXAlignment = Enum.TextXAlignment.Left
+	Title.TextXAlignment = Enum.TextXAlignment.Center
 	Title.TextTruncate = Enum.TextTruncate.AtEnd
 	Title.ZIndex = Theme.ZIndex.NodeHeader
 	Title.Parent = Header
@@ -295,8 +286,7 @@ function Node.Create(Config: NodeConfig): NodeInstance
 	end
 
 	local IsDragging = false
-	local DragStartPosition = Vector2.zero
-	local DragStartMouse = Vector2.zero
+	local LastMousePosition = Vector2.zero
 	local ZOrderOffset = 0
 
 	local function GetZoomScale(): number
@@ -377,8 +367,7 @@ function Node.Create(Config: NodeConfig): NodeInstance
 		end
 
 		IsDragging = true
-		DragStartPosition = Position
-		DragStartMouse = ClickPos
+		LastMousePosition = ClickPos
 		UpdateZIndex(true)
 
 		if Config.OnSelected then
@@ -395,11 +384,13 @@ function Node.Create(Config: NodeConfig): NodeInstance
 	table.insert(Connections, UserInputService.InputChanged:Connect(function(Input: InputObject)
 		if IsDragging and Input.UserInputType == Enum.UserInputType.MouseMovement then
 			local CurrentMouse = Vector2.new(Input.Position.X, Input.Position.Y)
-			local Delta = CurrentMouse - DragStartMouse
+			local ScreenDelta = CurrentMouse - LastMousePosition
 			local Zoom = GetZoomScale()
+			local WorldDelta = ScreenDelta / Zoom
 
-			Position = DragStartPosition + (Delta / Zoom)
+			Position = Position + WorldDelta
 			Container.Position = UDim2.fromOffset(Position.X, Position.Y)
+			LastMousePosition = CurrentMouse
 
 			if Config.OnMoved then
 				Config.OnMoved(Config.NodeId, Position)

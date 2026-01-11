@@ -1,6 +1,7 @@
 --!strict
 
 local Theme = require(script.Parent.Parent.Theme)
+local DropdownState = require(script.Parent.Parent.State.DropdownState)
 
 local Dropdown = {}
 
@@ -106,12 +107,14 @@ function Dropdown.Create(Config: DropdownConfig): DropdownInstance
 	local OptionButtons: { TextButton } = {}
 
 	local function CloseDropdown()
+		DropdownState.Close()
 		IsOpen = false
 		OptionsList.Visible = false
 		Arrow.Text = "▼"
 	end
 
 	local function OpenDropdown()
+		DropdownState.Open()
 		IsOpen = true
 		OptionsList.Visible = true
 		Arrow.Text = "▲"

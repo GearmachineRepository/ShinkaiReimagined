@@ -379,9 +379,9 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 					Title = "Load Action",
 					Options = Actions,
 					Parent = Container,
-					OnSelect = function(Option: { Id: string, Name: string })
+					OnSelected = function(OptionId: string)
 						if Config.OnLoad then
-							local ActionData = Config.OnLoad(Option.Id)
+							local ActionData = Config.OnLoad(OptionId)
 							if ActionData then
 								EditorInstance.LoadAction(ActionData)
 								Notification.Success("Action loaded successfully!", Container)

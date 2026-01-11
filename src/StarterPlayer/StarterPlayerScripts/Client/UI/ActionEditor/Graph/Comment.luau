@@ -159,10 +159,8 @@ function Comment.Create(Config: CommentConfig): CommentInstance
 	local Connections: { RBXScriptConnection } = {}
 	local IsDragging = false
 	local IsResizing = false
-	local DragStartPosition = Vector2.zero
-	local DragStartMouse = Vector2.zero
-	local ResizeStartSize = Vector2.zero
-	local ResizeStartMouse = Vector2.zero
+	local LastMousePosition = Vector2.zero
+	local LastResizeMousePosition = Vector2.zero
 
 	local function GetZoomScale(): number
 		local Parent = Container.Parent
@@ -225,8 +223,7 @@ function Comment.Create(Config: CommentConfig): CommentInstance
 			end
 
 			IsDragging = true
-			DragStartPosition = Position
-			DragStartMouse = ClickPos
+			LastMousePosition = ClickPos
 
 			if Config.OnSelected then
 				Config.OnSelected(Config.CommentId)
@@ -237,8 +234,7 @@ function Comment.Create(Config: CommentConfig): CommentInstance
 	table.insert(Connections, ResizeHandle.InputBegan:Connect(function(Input: InputObject)
 		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
 			IsResizing = true
-			ResizeStartSize = Size
-			ResizeStartMouse = Vector2.new(Input.Position.X, Input.Position.Y)
+			LastResizeMousePosition = Vector2.new(Input.Position.X, Input.Position.Y)
 		end
 	end))
 
@@ -251,10 +247,11 @@ function Comment.Create(Config: CommentConfig): CommentInstance
 		local CurrentMouse = Vector2.new(Input.Position.X, Input.Position.Y)
 
 		if IsDragging then
-			local ScreenDelta = CurrentMouse - DragStartMouse
+			local ScreenDelta = CurrentMouse - LastMousePosition
 			local WorldDelta = ScreenDelta / Zoom
-			Position = DragStartPosition + WorldDelta
+			Position = Position + WorldDelta
 			Container.Position = UDim2.fromOffset(Position.X, Position.Y)
+			LastMousePosition = CurrentMouse
 
 			if Config.OnMoved then
 				Config.OnMoved(Config.CommentId, Position)
@@ -262,12 +259,13 @@ function Comment.Create(Config: CommentConfig): CommentInstance
 		end
 
 		if IsResizing then
-			local ScreenDelta = CurrentMouse - ResizeStartMouse
+			local ScreenDelta = CurrentMouse - LastResizeMousePosition
 			local WorldDelta = ScreenDelta / Zoom
-			local NewWidth = math.max(MIN_WIDTH, ResizeStartSize.X + WorldDelta.X)
-			local NewHeight = math.max(MIN_HEIGHT, ResizeStartSize.Y + WorldDelta.Y)
+			local NewWidth = math.max(MIN_WIDTH, Size.X + WorldDelta.X)
+			local NewHeight = math.max(MIN_HEIGHT, Size.Y + WorldDelta.Y)
 			Size = Vector2.new(NewWidth, NewHeight)
 			Container.Size = UDim2.fromOffset(Size.X, Size.Y)
+			LastResizeMousePosition = CurrentMouse
 
 			if Config.OnResized then
 				Config.OnResized(Config.CommentId, Size)

@@ -4,6 +4,7 @@ local UserInputService = game:GetService("UserInputService")
 local GuiService = game:GetService("GuiService")
 
 local Theme = require(script.Parent.Parent.Theme)
+local DropdownState = require(script.Parent.Parent.State.DropdownState)
 
 local Canvas = {}
 
@@ -35,6 +36,7 @@ local MIN_ZOOM = 0.25
 local MAX_ZOOM = 2
 local ZOOM_STEP = 0.1
 local GRID_SIZE = 100
+local GRID_WORLD_SIZE = 20000
 
 function Canvas.Create(Config: CanvasConfig): CanvasInstance
 	local Offset = Vector2.zero
@@ -49,19 +51,6 @@ function Canvas.Create(Config: CanvasConfig): CanvasInstance
 	Container.BackgroundColor3 = Theme.Colors.BackgroundDark
 	Container.BorderSizePixel = 0
 	Container.ClipsDescendants = true
-
-	local GridBackground = Instance.new("ImageLabel")
-	GridBackground.Name = "Grid"
-	GridBackground.Size = UDim2.fromScale(2, 2)
-	GridBackground.Position = UDim2.fromScale(0, 0)
-	GridBackground.BackgroundTransparency = 1
-	GridBackground.Image = if Config.GridImage then Config.GridImage else ""
-	GridBackground.ImageColor3 = Color3.fromRGB(255, 255, 255)
-	GridBackground.ImageTransparency = 0.925
-	GridBackground.ScaleType = Enum.ScaleType.Tile
-	GridBackground.TileSize = UDim2.fromOffset(GRID_SIZE, GRID_SIZE)
-	GridBackground.ZIndex = 1
-	GridBackground.Parent = Container
 
 	local ClickDetector = Instance.new("TextButton")
 	ClickDetector.Name = "ClickDetector"
@@ -85,6 +74,19 @@ function Canvas.Create(Config: CanvasConfig): CanvasInstance
 	UIScaleObj.Scale = 1
 	UIScaleObj.Parent = Content
 
+	local GridBackground = Instance.new("ImageLabel")
+	GridBackground.Name = "Grid"
+	GridBackground.Size = UDim2.fromOffset(GRID_WORLD_SIZE, GRID_WORLD_SIZE)
+	GridBackground.Position = UDim2.fromOffset(-GRID_WORLD_SIZE / 2, -GRID_WORLD_SIZE / 2)
+	GridBackground.BackgroundTransparency = 1
+	GridBackground.Image = if Config.GridImage then Config.GridImage else ""
+	GridBackground.ImageColor3 = Color3.fromRGB(255, 255, 255)
+	GridBackground.ImageTransparency = 0.925
+	GridBackground.ScaleType = Enum.ScaleType.Tile
+	GridBackground.TileSize = UDim2.fromOffset(GRID_SIZE, GRID_SIZE)
+	GridBackground.ZIndex = 1
+	GridBackground.Parent = Content
+
 	if Config.Parent then
 		Container.Parent = Config.Parent
 	end
@@ -98,15 +100,6 @@ function Canvas.Create(Config: CanvasConfig): CanvasInstance
 	local function UpdateContentTransform()
 		Content.Position = UDim2.new(0.5, Offset.X, 0.5, Offset.Y)
 		UIScaleObj.Scale = Zoom
-
-		if GridBackground then
-			local ScaledGridSize = GRID_SIZE * Zoom
-			GridBackground.TileSize = UDim2.fromOffset(ScaledGridSize, ScaledGridSize)
-
-			local GridOffsetX = Offset.X % ScaledGridSize
-			local GridOffsetY = Offset.Y % ScaledGridSize
-			GridBackground.Position = UDim2.new(-0.5, GridOffsetX, -0.5, GridOffsetY)
-		end
 	end
 
 	table.insert(Connections, Container.MouseEnter:Connect(function()
@@ -183,6 +176,10 @@ function Canvas.Create(Config: CanvasConfig): CanvasInstance
 	table.insert(Connections, UserInputService.InputChanged:Connect(function(Input: InputObject)
 		if Input.UserInputType == Enum.UserInputType.MouseWheel then
 			if not IsMouseOver then
+				return
+			end
+
+			if DropdownState.IsAnyOpen() then
 				return
 			end
 
