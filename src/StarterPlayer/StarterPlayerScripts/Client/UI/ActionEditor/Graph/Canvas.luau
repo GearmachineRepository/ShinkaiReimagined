@@ -148,6 +148,9 @@ function Canvas.Create(Config: CanvasConfig): CanvasInstance
 
 	table.insert(Connections, Container.InputBegan:Connect(function(Input: InputObject)
 		if Input.UserInputType == Enum.UserInputType.MouseButton3 or Input.UserInputType == Enum.UserInputType.MouseButton2 then
+			if DropdownState.IsAnyOpen() then
+				return
+			end
 			IsPanning = true
 			PanStartOffset = Offset
 			PanStartMouse = Vector2.new(Input.Position.X, Input.Position.Y)
