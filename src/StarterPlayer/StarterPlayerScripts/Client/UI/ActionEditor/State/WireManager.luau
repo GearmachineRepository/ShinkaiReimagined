@@ -28,6 +28,7 @@ export type ConnectionState = {
 	FromPortName: string?,
 	FromPortType: Types.PortType?,
 	FromDirection: Types.PortDirection?,
+	FromValueType: string?,
 }
 
 local CurrentConnectionState: ConnectionState = {
@@ -36,6 +37,7 @@ local CurrentConnectionState: ConnectionState = {
 	FromPortName = nil,
 	FromPortType = nil,
 	FromDirection = nil,
+	FromValueType = nil,
 }
 
 function WireManager.Create(
@@ -43,7 +45,8 @@ function WireManager.Create(
 	FromPortName: string,
 	ToNodeId: string,
 	ToPortName: string,
-	WireType: Types.PortType
+	WireType: Types.PortType,
+	ValueType: string?
 ): Types.WireInstance?
 	local Branch = BranchManager.GetCurrent()
 	if not Branch then
@@ -67,6 +70,7 @@ function WireManager.Create(
 		ToNodeId = ToNodeId,
 		ToPortName = ToPortName,
 		WireType = WireType,
+		ValueType = ValueType,
 	}
 
 	table.insert(Branch.Wires, WireData)
@@ -252,6 +256,26 @@ function WireManager.WireExists(
 	return false
 end
 
+local function GetPortValueType(NodeId: string, PortName: string): string?
+	local NodeData = NodeManager.GetById(NodeId)
+	if not NodeData then
+		return nil
+	end
+
+	local Definition = NodeRegistry.Get(NodeData.BlockType)
+	if not Definition then
+		return nil
+	end
+
+	for _, PortDef in Definition.Ports do
+		if PortDef.Name == PortName then
+			return PortDef.ValueType
+		end
+	end
+
+	return nil
+end
+
 function WireManager.StartConnection(
 	NodeId: string,
 	PortName: string,
@@ -264,6 +288,7 @@ function WireManager.StartConnection(
 		FromPortName = PortName,
 		FromPortType = PortType,
 		FromDirection = Direction,
+		FromValueType = GetPortValueType(NodeId, PortName),
 	}
 
 	ConnectionStartedSignal:Fire(CurrentConnectionState)
@@ -320,6 +345,7 @@ function WireManager.EndConnection(NodeId: string, PortName: string): Types.Wire
 	local FromPortName = CurrentConnectionState.FromPortName :: string
 	local ToNodeId = NodeId
 	local ToPortName = PortName
+	local ValueType = CurrentConnectionState.FromValueType
 
 	if FromDirection == "Input" then
 		FromNodeId, ToNodeId = ToNodeId, FromNodeId
@@ -331,7 +357,8 @@ function WireManager.EndConnection(NodeId: string, PortName: string): Types.Wire
 		FromPortName,
 		ToNodeId,
 		ToPortName,
-		CurrentConnectionState.FromPortType :: Types.PortType
+		CurrentConnectionState.FromPortType :: Types.PortType,
+		ValueType
 	)
 
 	WireManager.CancelConnection()
@@ -349,6 +376,7 @@ function WireManager.CancelConnection()
 		FromPortName = nil,
 		FromPortType = nil,
 		FromDirection = nil,
+		FromValueType = nil,
 	}
 
 	if WasConnecting then

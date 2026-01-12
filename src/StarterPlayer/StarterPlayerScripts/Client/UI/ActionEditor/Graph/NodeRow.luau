@@ -18,12 +18,13 @@ export type RowConfig = {
 	NodeId: string,
 	PortName: string?,
 	PortType: Types.PortType?,
+	ValueType: string?,
 	PropertyDef: Types.PropertyDefinition?,
 	PropertyValue: any?,
 	IsWired: boolean?,
 	Parent: GuiObject?,
 	ZIndex: number?,
-	OnConnectionStart: ((NodeId: string, PortName: string, PortType: Types.PortType, Direction: Types.PortDirection) -> ())?,
+	OnConnectionStart: ((NodeId: string, PortName: string, PortType: Types.PortType, Direction: Types.PortDirection, ValueType: string?) -> ())?,
 	OnConnectionEnd: ((NodeId: string, PortName: string) -> ())?,
 	OnPropertyChanged: ((Key: string, Value: any) -> ())?,
 }
@@ -34,6 +35,7 @@ export type RowInstance = {
 	PortName: string?,
 	Direction: Types.PortDirection?,
 	PortType: Types.PortType?,
+	ValueType: string?,
 	PropertyKey: string?,
 	GetWorldPosition: () -> Vector2?,
 	SetWired: (Wired: boolean) -> (),
@@ -76,7 +78,7 @@ function NodeRow.Create(Config: RowConfig): RowInstance
 	Container.ZIndex = CurrentZIndex
 	Container.ClipsDescendants = false
 
-	local PortColor = Theme.GetPortColor(Config.PortType or "Flow")
+	local PortColor = Theme.GetPortColor(Config.PortType or "Flow", Config.ValueType)
 	local ClickDetector: TextButton? = nil
 
 	if Config.RowType == "InputPort" or Config.RowType == "OutputPort" then
@@ -129,7 +131,7 @@ function NodeRow.Create(Config: RowConfig): RowInstance
 
 		table.insert(Connections, NewClickDetector.MouseButton1Down:Connect(function()
 			if Config.OnConnectionStart and Config.PortName and Config.PortType then
-				Config.OnConnectionStart(Config.NodeId, Config.PortName, Config.PortType, Direction :: Types.PortDirection)
+				Config.OnConnectionStart(Config.NodeId, Config.PortName, Config.PortType, Direction :: Types.PortDirection, Config.ValueType)
 			end
 		end))
 
@@ -298,6 +300,7 @@ function NodeRow.Create(Config: RowConfig): RowInstance
 		PortName = Config.PortName,
 		Direction = Direction,
 		PortType = Config.PortType,
+		ValueType = Config.ValueType,
 		PropertyKey = Config.PropertyDef and Config.PropertyDef.Key or nil,
 	} :: any
 

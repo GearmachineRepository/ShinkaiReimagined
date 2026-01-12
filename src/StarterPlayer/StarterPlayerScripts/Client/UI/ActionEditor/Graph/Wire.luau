@@ -35,6 +35,7 @@ local PLUS_THICKNESS = 2
 export type WireConfig = {
 	WireId: string,
 	WireType: Types.PortType,
+	ValueType: string?,
 	Parent: GuiObject?,
 	OnClick: ((WireId: string) -> ())?,
 	CanInteract: (() -> boolean)?,
@@ -127,7 +128,8 @@ end
 
 function Wire.Create(Config: WireConfig): WireInstance
 	local IsPreviewWire = Config.WireId == "Preview"
-	local WireColor = Theme.GetWireColor(Config.WireType)
+	local WireColor = Theme.GetWireColor(Config.WireType, Config.ValueType)
+
 	local StartPosition = Vector2.zero
 	local EndPosition = Vector2.new(100, 0)
 	local IsHighlighted = false
@@ -497,10 +499,11 @@ function Wire.Create(Config: WireConfig): WireInstance
 	return WireInstance
 end
 
-function Wire.CreatePreview(Parent: GuiObject, WireType: Types.PortType): WireInstance
+function Wire.CreatePreview(Parent: GuiObject, WireType: Types.PortType, ValueType: string?): WireInstance
 	local PreviewWire = Wire.Create({
 		WireId = "Preview",
 		WireType = WireType,
+		ValueType = ValueType,
 		Parent = Parent,
 	})
 

@@ -242,6 +242,7 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		local WireUI = Wire.Create({
 			WireId = WireData.WireId,
 			WireType = WireData.WireType,
+			ValueType = WireData.ValueType,
 			Parent = CanvasInstance.Content,
 			OnClick = function(ClickedWireId: string)
 				WireManager.Delete(ClickedWireId)
@@ -612,7 +613,7 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 	end))
 
 	table.insert(ManagerConnections, WireManager.ConnectionStarted:Connect(function(ConnectionState)
-		PreviewWire = Wire.CreatePreview(CanvasInstance.Content, ConnectionState.FromPortType :: "Flow" | "Signal")
+		PreviewWire = Wire.CreatePreview(CanvasInstance.Content, ConnectionState.FromPortType :: Types.PortType, ConnectionState.FromValueType)
 		UpdatePreviewWire()
 	end))
 

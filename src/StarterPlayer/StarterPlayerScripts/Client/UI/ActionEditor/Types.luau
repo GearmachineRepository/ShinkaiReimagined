@@ -27,6 +27,7 @@ export type WireInstance = {
 	ToNodeId: string,
 	ToPortName: string,
 	WireType: PortType,
+	ValueType: string?,
 }
 
 export type CommentData = {
