@@ -40,6 +40,19 @@ local CurrentConnectionState: ConnectionState = {
 	FromValueType = nil,
 }
 
+local function GetWireKey(FromNodeId: string, FromPortName: string, ToNodeId: string, ToPortName: string): string
+	return FromNodeId .. ":" .. FromPortName .. "->" .. ToNodeId .. ":" .. ToPortName
+end
+
+local function BuildWireIndex(Wires: { Types.WireInstance }): { [string]: Types.WireInstance }
+	local Index: { [string]: Types.WireInstance } = {}
+	for _, WireData in Wires do
+		local Key = GetWireKey(WireData.FromNodeId, WireData.FromPortName, WireData.ToNodeId, WireData.ToPortName)
+		Index[Key] = WireData
+	end
+	return Index
+end
+
 function WireManager.Create(
 	FromNodeId: string,
 	FromPortName: string,
@@ -53,14 +66,11 @@ function WireManager.Create(
 		return nil
 	end
 
-	for _, ExistingWire in Branch.Wires do
-		if ExistingWire.FromNodeId == FromNodeId
-			and ExistingWire.FromPortName == FromPortName
-			and ExistingWire.ToNodeId == ToNodeId
-			and ExistingWire.ToPortName == ToPortName
-		then
-			return nil
-		end
+	local Key = GetWireKey(FromNodeId, FromPortName, ToNodeId, ToPortName)
+	local WireIndex = BuildWireIndex(Branch.Wires)
+
+	if WireIndex[Key] then
+		return nil
 	end
 
 	local WireData: Types.WireInstance = {
@@ -243,17 +253,10 @@ function WireManager.WireExists(
 		return false
 	end
 
-	for _, WireData in Branch.Wires do
-		if WireData.FromNodeId == FromNodeId
-			and WireData.FromPortName == FromPortName
-			and WireData.ToNodeId == ToNodeId
-			and WireData.ToPortName == ToPortName
-		then
-			return true
-		end
-	end
+	local Key = GetWireKey(FromNodeId, FromPortName, ToNodeId, ToPortName)
+	local WireIndex = BuildWireIndex(Branch.Wires)
 
-	return false
+	return WireIndex[Key] ~= nil
 end
 
 local function GetPortValueType(NodeId: string, PortName: string): string?

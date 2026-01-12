@@ -31,6 +31,7 @@ function Dropdown.Create(Config: DropdownConfig): DropdownInstance
 	local Options = Config.Options or {}
 	local SelectedOption = Config.Selected
 	local IsOpen = false
+	local CurrentDropdownId: string? = nil
 	local BaseZIndex = Config.ZIndex or Theme.ZIndex.Panel
 
 	local Container = Instance.new("Frame")
@@ -107,14 +108,17 @@ function Dropdown.Create(Config: DropdownConfig): DropdownInstance
 	local OptionButtons: { TextButton } = {}
 
 	local function CloseDropdown()
-		DropdownState.Close()
+		if CurrentDropdownId then
+			DropdownState.Close(CurrentDropdownId)
+			CurrentDropdownId = nil
+		end
 		IsOpen = false
 		OptionsList.Visible = false
 		Arrow.Text = "▼"
 	end
 
 	local function OpenDropdown()
-		DropdownState.Open()
+		CurrentDropdownId = DropdownState.Open()
 		IsOpen = true
 		OptionsList.Visible = true
 		Arrow.Text = "▲"
@@ -125,14 +129,13 @@ function Dropdown.Create(Config: DropdownConfig): DropdownInstance
 		Button.Text = Option
 		Button.TextColor3 = Theme.Colors.Text
 		CloseDropdown()
-		DropdownState.Close()
 		if Config.OnSelected then
 			Config.OnSelected(Option)
 		end
 	end
 
 	local function RebuildOptions()
-		for _, OptionButton in pairs(OptionButtons) do
+		for _, OptionButton in OptionButtons do
 			OptionButton:Destroy()
 		end
 		table.clear(OptionButtons)
@@ -195,15 +198,15 @@ function Dropdown.Create(Config: DropdownConfig): DropdownInstance
 
 	RebuildOptions()
 
-	local Instance = {
+	local DropdownInstance: DropdownInstance = {
 		Frame = Container,
-	}
+	} :: any
 
-	function Instance.GetSelected(): string?
+	function DropdownInstance.GetSelected(): string?
 		return SelectedOption
 	end
 
-	function Instance.SetSelected(Option: string?)
+	function DropdownInstance.SetSelected(Option: string?)
 		SelectedOption = Option
 		if Option then
 			Button.Text = Option
@@ -214,12 +217,12 @@ function Dropdown.Create(Config: DropdownConfig): DropdownInstance
 		end
 	end
 
-	function Instance.SetOptions(NewOptions: { string })
+	function DropdownInstance.SetOptions(NewOptions: { string })
 		Options = NewOptions
 		RebuildOptions()
 	end
 
-	function Instance.Destroy()
+	function DropdownInstance.Destroy()
 		for _, Connection in Connections do
 			Connection:Disconnect()
 		end
@@ -229,7 +232,7 @@ function Dropdown.Create(Config: DropdownConfig): DropdownInstance
 		Container:Destroy()
 	end
 
-	return Instance
+	return DropdownInstance
 end
 
 return Dropdown

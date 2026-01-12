@@ -1,7 +1,5 @@
 --!strict
 
-local UserInputService = game:GetService("UserInputService")
-
 local DropdownState = require(script.Parent.Parent.State.DropdownState)
 local Theme = require(script.Parent.Parent.Theme)
 local Types = require(script.Parent.Parent.Types)
@@ -45,7 +43,7 @@ end
 
 function InlineControls.CreateNumber(Config: ControlConfig): ControlInstance
 	local CurrentValue = Config.Value or Config.PropertyDef.Default or 0
-	local IsDisabled = Config.Disabled or false
+	local _IsDisabled = Config.Disabled or false
 	local Connections: { RBXScriptConnection } = {}
 	local CurrentZIndex = Config.ZIndex or Theme.ZIndex.NodeContent
 
@@ -81,110 +79,49 @@ function InlineControls.CreateNumber(Config: ControlConfig): ControlInstance
 	TextBox.Size = UDim2.new(1, -CONTROL_PADDING * 2, 1, 0)
 	TextBox.Position = UDim2.fromOffset(CONTROL_PADDING, 0)
 	TextBox.BackgroundTransparency = 1
+	TextBox.Text = tostring(CurrentValue)
 	TextBox.TextColor3 = Theme.Colors.Text
+	TextBox.PlaceholderText = "0"
 	TextBox.PlaceholderColor3 = Theme.Colors.TextMuted
-	TextBox.FontFace = Theme.Fonts.Mono
+	TextBox.FontFace = Theme.Fonts.Default
 	TextBox.TextSize = Theme.TextSizes.Small
-	TextBox.TextXAlignment = Enum.TextXAlignment.Center
+	TextBox.TextXAlignment = Enum.TextXAlignment.Left
 	TextBox.ClearTextOnFocus = false
 	TextBox.ZIndex = CurrentZIndex + 2
 	TextBox.Parent = ValueBackground
 
-	local function UpdateDisplay()
-		if math.floor(CurrentValue) == CurrentValue then
-			TextBox.Text = tostring(CurrentValue)
-		else
-			TextBox.Text = string.format("%.2f", CurrentValue)
-		end
-	end
-
-	local function ApplyValue(Text: string)
-		local Num = tonumber(Text)
-		if Num then
-			local Min = Config.PropertyDef.Min or -9999
-			local Max = Config.PropertyDef.Max or 9999
-			Num = math.clamp(Num, Min, Max)
-			CurrentValue = Num
-			UpdateDisplay()
+	table.insert(Connections, TextBox.FocusLost:Connect(function()
+		local Parsed = tonumber(TextBox.Text)
+		if Parsed then
+			CurrentValue = Parsed
 			Config.OnChanged(CurrentValue)
 		else
-			UpdateDisplay()
-		end
-	end
-
-	UpdateDisplay()
-
-	local DragConnection: RBXScriptConnection?
-	local DragStartValue = 0
-	local DragStartX = 0
-	local IsDragging = false
-
-	table.insert(Connections, ValueBackground.InputBegan:Connect(function(Input: InputObject)
-		if IsDisabled then
-			return
-		end
-		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-			IsDragging = true
-			DragStartValue = CurrentValue
-			DragStartX = Input.Position.X
-
-			if DragConnection then
-				DragConnection:Disconnect()
-			end
-
-			DragConnection = UserInputService.InputChanged:Connect(function(MoveInput: InputObject)
-				if MoveInput.UserInputType == Enum.UserInputType.MouseMovement then
-					local Delta = MoveInput.Position.X - DragStartX
-					local Sensitivity = 0.1
-					local NewValue = DragStartValue + Delta * Sensitivity
-					local Min = Config.PropertyDef.Min or -9999
-					local Max = Config.PropertyDef.Max or 9999
-					CurrentValue = math.clamp(NewValue, Min, Max)
-					UpdateDisplay()
-				end
-			end)
+			TextBox.Text = tostring(CurrentValue)
 		end
 	end))
 
-	table.insert(Connections, ValueBackground.InputEnded:Connect(function(Input: InputObject)
-		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
-			if DragConnection then
-				DragConnection:Disconnect()
-				DragConnection = nil
-			end
-			if IsDragging and CurrentValue ~= DragStartValue then
-				Config.OnChanged(CurrentValue)
-			end
-			IsDragging = false
-		end
-	end))
-
-	table.insert(Connections, TextBox.FocusLost:Connect(function()
-		ApplyValue(TextBox.Text)
-	end))
-
-	local Instance: ControlInstance = {
+	local ControlInstance: ControlInstance = {
 		Frame = Container,
 	} :: any
 
-	function Instance.GetValue(): any
+	function ControlInstance.GetValue(): any
 		return CurrentValue
 	end
 
-	function Instance.SetValue(Value: any)
+	function ControlInstance.SetValue(Value: any)
 		CurrentValue = tonumber(Value) or 0
-		UpdateDisplay()
+		TextBox.Text = tostring(CurrentValue)
 	end
 
-	function Instance.SetDisabled(Disabled: boolean)
-		IsDisabled = Disabled
+	function ControlInstance.SetDisabled(Disabled: boolean)
+		_IsDisabled = Disabled
 		TextBox.TextEditable = not Disabled
 		ValueBackground.BackgroundTransparency = if Disabled then 0.5 else 0
 		TextBox.TextColor3 = if Disabled then Theme.Colors.TextMuted else Theme.Colors.Text
 		Label.TextColor3 = if Disabled then Theme.Colors.TextMuted else Theme.Colors.TextMuted
 	end
 
-	function Instance.SetZIndex(ZIndex: number)
+	function ControlInstance.SetZIndex(ZIndex: number)
 		CurrentZIndex = ZIndex
 		Container.ZIndex = ZIndex
 		Label.ZIndex = ZIndex + 1
@@ -192,26 +129,20 @@ function InlineControls.CreateNumber(Config: ControlConfig): ControlInstance
 		TextBox.ZIndex = ZIndex + 2
 	end
 
-	function Instance.Destroy()
+	function ControlInstance.Destroy()
 		for _, Conn in Connections do
 			Conn:Disconnect()
 		end
 		table.clear(Connections)
-		if DragConnection then
-			DragConnection:Disconnect()
-		end
 		Container:Destroy()
 	end
 
-	return Instance
+	return ControlInstance
 end
 
 function InlineControls.CreateBoolean(Config: ControlConfig): ControlInstance
-	local CurrentValue = Config.Value
-	if CurrentValue == nil then
-		CurrentValue = Config.PropertyDef.Default or false
-	end
-	local IsDisabled = Config.Disabled or false
+	local CurrentValue = Config.Value or Config.PropertyDef.Default or false
+	local _IsDisabled = Config.Disabled or false
 	local Connections: { RBXScriptConnection } = {}
 	local CurrentZIndex = Config.ZIndex or Theme.ZIndex.NodeContent
 
@@ -224,11 +155,12 @@ function InlineControls.CreateBoolean(Config: ControlConfig): ControlInstance
 	Checkbox.BackgroundColor3 = if CurrentValue then Theme.Colors.Primary else Theme.Colors.BackgroundDark
 	Checkbox.BorderSizePixel = 0
 	Checkbox.Text = ""
+	Checkbox.AutoButtonColor = true
 	Checkbox.ZIndex = CurrentZIndex + 1
 	Checkbox.Parent = Container
 
 	Theme.ApplyCorner(Checkbox, UDim.new(0, 3))
-	Theme.ApplyStroke(Checkbox, Theme.Colors.Border, 1)
+	Theme.ApplyStroke(Checkbox, Theme.Colors.Border)
 
 	local Checkmark = Instance.new("TextLabel")
 	Checkmark.Name = "Checkmark"
@@ -244,8 +176,8 @@ function InlineControls.CreateBoolean(Config: ControlConfig): ControlInstance
 
 	local Label = Instance.new("TextLabel")
 	Label.Name = "Label"
-	Label.Size = UDim2.new(1, -CHECKBOX_SIZE - 6, 1, 0)
-	Label.Position = UDim2.fromOffset(CHECKBOX_SIZE + 6, 0)
+	Label.Size = UDim2.new(1, -(CHECKBOX_SIZE + 8), 1, 0)
+	Label.Position = UDim2.fromOffset(CHECKBOX_SIZE + 8, 0)
 	Label.BackgroundTransparency = 1
 	Label.Text = Config.PropertyDef.Label
 	Label.TextColor3 = Theme.Colors.Text
@@ -262,7 +194,7 @@ function InlineControls.CreateBoolean(Config: ControlConfig): ControlInstance
 	end
 
 	table.insert(Connections, Checkbox.MouseButton1Click:Connect(function()
-		if IsDisabled then
+		if _IsDisabled then
 			return
 		end
 		CurrentValue = not CurrentValue
@@ -270,27 +202,27 @@ function InlineControls.CreateBoolean(Config: ControlConfig): ControlInstance
 		Config.OnChanged(CurrentValue)
 	end))
 
-	local Instance: ControlInstance = {
+	local ControlInstance: ControlInstance = {
 		Frame = Container,
 	} :: any
 
-	function Instance.GetValue(): any
+	function ControlInstance.GetValue(): any
 		return CurrentValue
 	end
 
-	function Instance.SetValue(Value: any)
+	function ControlInstance.SetValue(Value: any)
 		CurrentValue = Value == true
 		UpdateDisplay()
 	end
 
-	function Instance.SetDisabled(Disabled: boolean)
-		IsDisabled = Disabled
+	function ControlInstance.SetDisabled(Disabled: boolean)
+		_IsDisabled = Disabled
 		Checkbox.AutoButtonColor = not Disabled
 		Checkbox.BackgroundTransparency = if Disabled then 0.5 else 0
 		Label.TextColor3 = if Disabled then Theme.Colors.TextMuted else Theme.Colors.Text
 	end
 
-	function Instance.SetZIndex(ZIndex: number)
+	function ControlInstance.SetZIndex(ZIndex: number)
 		CurrentZIndex = ZIndex
 		Container.ZIndex = ZIndex
 		Checkbox.ZIndex = ZIndex + 1
@@ -298,7 +230,7 @@ function InlineControls.CreateBoolean(Config: ControlConfig): ControlInstance
 		Label.ZIndex = ZIndex + 1
 	end
 
-	function Instance.Destroy()
+	function ControlInstance.Destroy()
 		for _, Conn in Connections do
 			Conn:Disconnect()
 		end
@@ -306,14 +238,15 @@ function InlineControls.CreateBoolean(Config: ControlConfig): ControlInstance
 		Container:Destroy()
 	end
 
-	return Instance
+	return ControlInstance
 end
 
 function InlineControls.CreateDropdown(Config: ControlConfig): ControlInstance
 	local CurrentValue = Config.Value or Config.PropertyDef.Default or ""
 	local Options = Config.PropertyDef.Options or {}
-	local IsDisabled = Config.Disabled or false
+	local _IsDisabled = Config.Disabled or false
 	local IsOpen = false
+	local CurrentDropdownId: string? = nil
 	local Connections: { RBXScriptConnection } = {}
 	local CurrentZIndex = Config.ZIndex or Theme.ZIndex.NodeContent
 	local DropdownList: Frame? = nil
@@ -382,7 +315,10 @@ function InlineControls.CreateDropdown(Config: ControlConfig): ControlInstance
 			DropdownList = nil
 		end
 
-		DropdownState.Close()
+		if CurrentDropdownId then
+			DropdownState.Close(CurrentDropdownId)
+			CurrentDropdownId = nil
+		end
 		IsOpen = false
 		Arrow.Text = "▼"
 	end
@@ -393,7 +329,7 @@ function InlineControls.CreateDropdown(Config: ControlConfig): ControlInstance
 			return
 		end
 
-		DropdownState.Open()
+		CurrentDropdownId = DropdownState.Open()
 		IsOpen = true
 		Arrow.Text = "▲"
 
@@ -402,8 +338,7 @@ function InlineControls.CreateDropdown(Config: ControlConfig): ControlInstance
 		local ScreenGui = ButtonBackground:FindFirstAncestorOfClass("ScreenGui")
 
 		if not ScreenGui then
-			IsOpen = false
-			Arrow.Text = "▼"
+			CloseDropdown()
 			return
 		end
 
@@ -476,7 +411,7 @@ function InlineControls.CreateDropdown(Config: ControlConfig): ControlInstance
 	end
 
 	table.insert(Connections, Button.MouseButton1Click:Connect(function()
-		if IsDisabled then
+		if _IsDisabled then
 			return
 		end
 		if IsOpen then
@@ -486,21 +421,21 @@ function InlineControls.CreateDropdown(Config: ControlConfig): ControlInstance
 		end
 	end))
 
-	local Instance: ControlInstance = {
+	local ControlInstance: ControlInstance = {
 		Frame = Container,
 	} :: any
 
-	function Instance.GetValue(): any
+	function ControlInstance.GetValue(): any
 		return CurrentValue
 	end
 
-	function Instance.SetValue(Value: any)
+	function ControlInstance.SetValue(Value: any)
 		CurrentValue = Value or ""
 		Button.Text = tostring(CurrentValue)
 	end
 
-	function Instance.SetDisabled(Disabled: boolean)
-		IsDisabled = Disabled
+	function ControlInstance.SetDisabled(Disabled: boolean)
+		_IsDisabled = Disabled
 		Button.AutoButtonColor = not Disabled
 		ButtonBackground.BackgroundTransparency = if Disabled then 0.5 else 0
 		Button.TextColor3 = if Disabled then Theme.Colors.TextMuted else Theme.Colors.Text
@@ -510,7 +445,7 @@ function InlineControls.CreateDropdown(Config: ControlConfig): ControlInstance
 		end
 	end
 
-	function Instance.SetZIndex(ZIndex: number)
+	function ControlInstance.SetZIndex(ZIndex: number)
 		CurrentZIndex = ZIndex
 		Container.ZIndex = ZIndex
 		Label.ZIndex = ZIndex + 1
@@ -519,7 +454,7 @@ function InlineControls.CreateDropdown(Config: ControlConfig): ControlInstance
 		Arrow.ZIndex = ZIndex + 2
 	end
 
-	function Instance.Destroy()
+	function ControlInstance.Destroy()
 		CloseDropdown()
 		for _, Conn in Connections do
 			Conn:Disconnect()
@@ -528,12 +463,12 @@ function InlineControls.CreateDropdown(Config: ControlConfig): ControlInstance
 		Container:Destroy()
 	end
 
-	return Instance
+	return ControlInstance
 end
 
 function InlineControls.CreateString(Config: ControlConfig): ControlInstance
 	local CurrentValue = Config.Value or Config.PropertyDef.Default or ""
-	local IsDisabled = Config.Disabled or false
+	local _IsDisabled = Config.Disabled or false
 	local _IsFocused = false
 	local Connections: { RBXScriptConnection } = {}
 	local CurrentZIndex = Config.ZIndex or Theme.ZIndex.NodeContent
@@ -596,7 +531,7 @@ function InlineControls.CreateString(Config: ControlConfig): ControlInstance
 	end
 
 	table.insert(Connections, TextBox.Focused:Connect(function()
-		if not IsDisabled then
+		if not _IsDisabled then
 			SetFocusedLayout(true)
 		end
 	end))
@@ -607,28 +542,28 @@ function InlineControls.CreateString(Config: ControlConfig): ControlInstance
 		SetFocusedLayout(false)
 	end))
 
-	local Instance: ControlInstance = {
+	local ControlInstance: ControlInstance = {
 		Frame = Container,
 	} :: any
 
-	function Instance.GetValue(): any
+	function ControlInstance.GetValue(): any
 		return CurrentValue
 	end
 
-	function Instance.SetValue(Value: any)
+	function ControlInstance.SetValue(Value: any)
 		CurrentValue = tostring(Value or "")
 		TextBox.Text = CurrentValue
 	end
 
-	function Instance.SetDisabled(Disabled: boolean)
-		IsDisabled = Disabled
+	function ControlInstance.SetDisabled(Disabled: boolean)
+		_IsDisabled = Disabled
 		TextBox.TextEditable = not Disabled
 		ValueBackground.BackgroundTransparency = if Disabled then 0.5 else 0
 		TextBox.TextColor3 = if Disabled then Theme.Colors.TextMuted else Theme.Colors.Text
 		Label.TextColor3 = if Disabled then Theme.Colors.TextMuted else Theme.Colors.TextMuted
 	end
 
-	function Instance.SetZIndex(ZIndex: number)
+	function ControlInstance.SetZIndex(ZIndex: number)
 		CurrentZIndex = ZIndex
 		Container.ZIndex = ZIndex
 		Label.ZIndex = ZIndex + 1
@@ -636,7 +571,7 @@ function InlineControls.CreateString(Config: ControlConfig): ControlInstance
 		TextBox.ZIndex = ZIndex + 2
 	end
 
-	function Instance.Destroy()
+	function ControlInstance.Destroy()
 		for _, Conn in Connections do
 			Conn:Disconnect()
 		end
@@ -644,7 +579,7 @@ function InlineControls.CreateString(Config: ControlConfig): ControlInstance
 		Container:Destroy()
 	end
 
-	return Instance
+	return ControlInstance
 end
 
 function InlineControls.Create(Config: ControlConfig): ControlInstance?

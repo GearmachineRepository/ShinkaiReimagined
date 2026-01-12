@@ -1,19 +1,27 @@
 --!strict
 
+local HttpService = game:GetService("HttpService")
+
 local DropdownState = {}
 
-local OpenDropdownCount = 0
+local OpenDropdowns: { [string]: boolean } = {}
 
-function DropdownState.Open()
-	OpenDropdownCount = OpenDropdownCount + 1
+function DropdownState.Open(DropdownId: string?): string
+	local Id = DropdownId or HttpService:GenerateGUID(false)
+	OpenDropdowns[Id] = true
+	return Id
 end
 
-function DropdownState.Close()
-	OpenDropdownCount = math.max(0, OpenDropdownCount - 1)
+function DropdownState.Close(DropdownId: string)
+	OpenDropdowns[DropdownId] = nil
 end
 
 function DropdownState.IsAnyOpen(): boolean
-	return OpenDropdownCount > 0
+	return next(OpenDropdowns) ~= nil
+end
+
+function DropdownState.CloseAll()
+	table.clear(OpenDropdowns)
 end
 
 return DropdownState

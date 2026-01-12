@@ -2,6 +2,11 @@
 
 local UserInputService = game:GetService("UserInputService")
 local GuiService = game:GetService("GuiService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Packages = require(Shared.Packages)
+local Trove = Packages.Trove
 
 local Theme = require(script.Parent.Parent.Theme)
 local Types = require(script.Parent.Parent.Types)
@@ -23,9 +28,12 @@ local NodeManager = require(script.Parent.Parent.State.NodeManager)
 local WireManager = require(script.Parent.Parent.State.WireManager)
 local CommentManager = require(script.Parent.Parent.State.CommentManager)
 local WireSnapDetector = require(script.Parent.Parent.State.WireSnapDetector)
+local DropdownState = require(script.Parent.Parent.State.DropdownState)
 local ActionSerializer = require(script.Parent.Parent.Serialization.ActionSerializer)
 
 local EditorWindow = {}
+
+local MAX_ZORDER = 10000
 
 export type EditorWindowConfig = {
 	Parent: GuiObject,
@@ -49,13 +57,12 @@ export type EditorWindowInstance = {
 function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 	EditorState.Init()
 
+	local EditorTrove = Trove.new()
+
 	local NodeInstances: { [string]: Node.NodeInstance } = {}
 	local WireInstances: { [string]: Wire.WireInstance } = {}
 	local CommentInstances: { [string]: Comment.CommentInstance } = {}
 	local PreviewWire: Wire.WireInstance? = nil
-
-	local EditorConnections: { RBXScriptConnection } = {}
-	local ManagerConnections: { any } = {}
 
 	local NodeZOrderCounter = 0
 
@@ -65,6 +72,7 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 	Container.BackgroundColor3 = Theme.Colors.Background
 	Container.BorderSizePixel = 0
 	Container.Parent = Config.Parent
+	EditorTrove:Add(Container)
 
 	local ModalBackground = Instance.new("TextButton")
 	ModalBackground.Name = "ModalBackground"
@@ -82,6 +90,21 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 	local CanvasInstance: Canvas.CanvasInstance = nil :: any
 
 	local EditorInstance: EditorWindowInstance = nil :: any
+
+	local function ConfirmIfDirty(OnConfirm: () -> ())
+		if EditorState.IsDirty() then
+			Modal.Confirm({
+				Title = "Unsaved Changes",
+				Message = "You have unsaved changes. Are you sure you want to continue?",
+				ConfirmText = "Discard",
+				ConfirmColor = Theme.Colors.Error,
+				Parent = Container,
+				OnConfirm = OnConfirm,
+			})
+		else
+			OnConfirm()
+		end
+	end
 
 	local function CollectAllPortData(): { {
 		NodeId: string,
@@ -119,6 +142,40 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		end
 
 		return WiredInputs
+	end
+
+	local function UpdateWirePositions()
+		task.defer(function()
+			for WireId, WireUI in WireInstances do
+				local WireData = WireManager.GetById(WireId)
+				if not WireData then
+					continue
+				end
+
+				local FromNodeUI = NodeInstances[WireData.FromNodeId]
+				local ToNodeUI = NodeInstances[WireData.ToNodeId]
+
+				if not FromNodeUI or not ToNodeUI then
+					continue
+				end
+
+				local FromPort = FromNodeUI.GetPort(WireData.FromPortName)
+				local ToPort = ToNodeUI.GetPort(WireData.ToPortName)
+
+				if not FromPort or not ToPort then
+					continue
+				end
+
+				WireUI.SetPositions(FromPort.GetWorldPosition(), ToPort.GetWorldPosition())
+			end
+		end)
+	end
+
+	local function ClearPreviewWire()
+		if PreviewWire then
+			PreviewWire.Destroy()
+			PreviewWire = nil
+		end
 	end
 
 	local function UpdatePreviewWire()
@@ -167,43 +224,34 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		PreviewWire.SetPositions(StartPos, EndPos)
 	end
 
-	local function ClearPreviewWire()
-		if PreviewWire then
-			PreviewWire.Destroy()
-			PreviewWire = nil
+	local function NormalizeZOrders()
+		local SortedNodes: { { Id: string, UI: Node.NodeInstance, ZOrder: number } } = {}
+		for NodeId, NodeUI in NodeInstances do
+			local CurrentZOrder = NodeUI.Frame.ZIndex
+			table.insert(SortedNodes, { Id = NodeId, UI = NodeUI, ZOrder = CurrentZOrder })
 		end
-		WireSnapDetector.ClearSnapState()
-	end
 
-	local function UpdateWirePositions()
-		task.defer(function()
-			for WireId, WireUI in WireInstances do
-				local WireData = WireManager.GetById(WireId)
-				if not WireData then
-					continue
-				end
-
-				local FromNodeUI = NodeInstances[WireData.FromNodeId]
-				local ToNodeUI = NodeInstances[WireData.ToNodeId]
-
-				if not FromNodeUI or not ToNodeUI then
-					continue
-				end
-
-				local FromPort = FromNodeUI.GetPort(WireData.FromPortName)
-				local ToPort = ToNodeUI.GetPort(WireData.ToPortName)
-
-				if not FromPort or not ToPort then
-					continue
-				end
-
-				WireUI.SetPositions(FromPort.GetWorldPosition(), ToPort.GetWorldPosition())
-			end
+		table.sort(SortedNodes, function(EntryA, EntryB)
+			return EntryA.ZOrder < EntryB.ZOrder
 		end)
+
+		for Index, Entry in SortedNodes do
+			if Entry.UI.SetZOrder then
+				Entry.UI.SetZOrder(Index)
+			end
+		end
+
+		NodeZOrderCounter = #SortedNodes
 	end
 
 	local function BringNodeToFront(NodeId: string)
 		NodeZOrderCounter = NodeZOrderCounter + 1
+
+		if NodeZOrderCounter > MAX_ZORDER then
+			NormalizeZOrders()
+			NodeZOrderCounter = NodeZOrderCounter + 1
+		end
+
 		local NodeUI = NodeInstances[NodeId]
 		if NodeUI and NodeUI.SetZOrder then
 			NodeUI.SetZOrder(NodeZOrderCounter)
@@ -342,20 +390,7 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 	ToolbarPanel = Toolbar.Create({
 		Parent = Container,
 		OnNew = function()
-			if EditorState.IsDirty() then
-				Modal.Confirm({
-					Title = "Unsaved Changes",
-					Message = "You have unsaved changes. Are you sure you want to create a new Action?",
-					ConfirmText = "Discard",
-					ConfirmColor = Theme.Colors.Error,
-					Parent = Container,
-					OnConfirm = function()
-						ResetToNewAction()
-					end,
-				})
-			else
-				ResetToNewAction()
-			end
+			ConfirmIfDirty(ResetToNewAction)
 		end,
 		OnSave = function()
 			if Config.OnSave then
@@ -394,20 +429,7 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 				})
 			end
 
-			if EditorState.IsDirty() then
-				Modal.Confirm({
-					Title = "Unsaved Changes",
-					Message = "You have unsaved changes. Are you sure you want to load a different Action?",
-					ConfirmText = "Discard",
-					ConfirmColor = Theme.Colors.Error,
-					Parent = Container,
-					OnConfirm = function()
-						ShowLoadModal()
-					end,
-				})
-			else
-				ShowLoadModal()
-			end
+			ConfirmIfDirty(ShowLoadModal)
 		end,
 		OnTest = function()
 			if Config.OnTest then
@@ -420,6 +442,9 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		end,
 	})
 	ToolbarPanel.Frame.Position = UDim2.new(0, 0, 0, 0)
+	EditorTrove:Add(function()
+		ToolbarPanel.Destroy()
+	end)
 
 	local ContentArea = Instance.new("Frame")
 	ContentArea.Name = "ContentArea"
@@ -435,10 +460,14 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		GridImage = if Theme.Assets.GridImage ~= "" then Theme.Assets.GridImage else nil,
 		Parent = ContentArea,
 		OnBackgroundClick = function()
+			DropdownState.CloseAll()
 			EditorState.ClearSelection()
 			WireManager.CancelConnection()
 		end,
 	})
+	EditorTrove:Add(function()
+		CanvasInstance.Destroy()
+	end)
 
 	NodeManager.SetCanvasToWorldFunction(function(Pos: Vector2): Vector2
 		return CanvasInstance.CanvasToWorld(Pos)
@@ -463,6 +492,9 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 			end
 		end,
 	})
+	EditorTrove:Add(function()
+		PalettePanel.Destroy()
+	end)
 
 	PropertiesPanel = PropertyPanel.Create({
 		Parent = ContentArea,
@@ -493,6 +525,9 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 			return BranchManager.GetBranchNames()
 		end,
 	})
+	EditorTrove:Add(function()
+		PropertiesPanel.Destroy()
+	end)
 
 	BranchListPanel = BranchList.Create({
 		Parent = ContentArea,
@@ -511,17 +546,20 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 			BranchManager.Rename(BranchId, NewName)
 		end,
 	})
+	EditorTrove:Add(function()
+		BranchListPanel.Destroy()
+	end)
 
-	table.insert(ManagerConnections, EditorState.DirtyChanged:Connect(function(IsDirty: boolean)
+	EditorTrove:Add(EditorState.DirtyChanged:Connect(function(IsDirty: boolean)
 		ToolbarPanel.SetDirty(IsDirty)
 	end))
 
-	table.insert(ManagerConnections, EditorState.BranchSelected:Connect(function(BranchId: string?)
+	EditorTrove:Add(EditorState.BranchSelected:Connect(function(BranchId: string?)
 		BranchListPanel.SetSelectedBranch(BranchId)
 		RenderCurrentBranch()
 	end))
 
-	table.insert(ManagerConnections, EditorState.NodeSelected:Connect(function(NodeId: string?, OldNodeId: string?)
+	EditorTrove:Add(EditorState.NodeSelected:Connect(function(NodeId: string?, OldNodeId: string?)
 		if OldNodeId and NodeInstances[OldNodeId] then
 			NodeInstances[OldNodeId].SetSelected(false)
 		end
@@ -536,7 +574,7 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		end
 	end))
 
-	table.insert(ManagerConnections, EditorState.CommentSelected:Connect(function(CommentId: string?, OldCommentId: string?)
+	EditorTrove:Add(EditorState.CommentSelected:Connect(function(CommentId: string?, OldCommentId: string?)
 		if OldCommentId and CommentInstances[OldCommentId] then
 			CommentInstances[OldCommentId].SetSelected(false)
 		end
@@ -550,20 +588,20 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		end
 	end))
 
-	table.insert(ManagerConnections, EditorState.StateReset:Connect(function()
+	EditorTrove:Add(EditorState.StateReset:Connect(function()
 		BranchListPanel.SetBranches(EditorState.GetBranches())
 		RenderCurrentBranch()
 	end))
 
-	table.insert(ManagerConnections, BranchManager.BranchListChanged:Connect(function(Branches)
+	EditorTrove:Add(BranchManager.BranchListChanged:Connect(function(Branches)
 		BranchListPanel.SetBranches(Branches)
 	end))
 
-	table.insert(ManagerConnections, NodeManager.NodeAdded:Connect(function(NodeData: Types.NodeInstance)
+	EditorTrove:Add(NodeManager.NodeAdded:Connect(function(NodeData: Types.NodeInstance)
 		CreateNodeUI(NodeData)
 	end))
 
-	table.insert(ManagerConnections, NodeManager.NodeDeleted:Connect(function(NodeId: string)
+	EditorTrove:Add(NodeManager.NodeDeleted:Connect(function(NodeId: string)
 		local NodeUI = NodeInstances[NodeId]
 		if NodeUI then
 			NodeUI.Destroy()
@@ -571,11 +609,11 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		end
 	end))
 
-	table.insert(ManagerConnections, NodeManager.NodeMoved:Connect(function()
+	EditorTrove:Add(NodeManager.NodeMoved:Connect(function()
 		UpdateWirePositions()
 	end))
 
-	table.insert(ManagerConnections, NodeManager.NodePropertyChanged:Connect(function(NodeId: string, Key: string, Value: any)
+	EditorTrove:Add(NodeManager.NodePropertyChanged:Connect(function(NodeId: string, Key: string, Value: any)
 		local NodeUI = NodeInstances[NodeId]
 		if NodeUI and NodeUI.SetPropertyValue then
 			NodeUI.SetPropertyValue(Key, Value)
@@ -587,7 +625,7 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		end
 	end))
 
-	table.insert(ManagerConnections, WireManager.WireCreated:Connect(function(WireData: Types.WireInstance)
+	EditorTrove:Add(WireManager.WireCreated:Connect(function(WireData: Types.WireInstance)
 		CreateWireUI(WireData)
 		UpdateWirePositions()
 
@@ -597,7 +635,7 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		end
 	end))
 
-	table.insert(ManagerConnections, WireManager.WireDeleted:Connect(function(WireId: string, WireData: Types.WireInstance?)
+	EditorTrove:Add(WireManager.WireDeleted:Connect(function(WireId: string, WireData: Types.WireInstance?)
 		if WireData then
 			local ToNodeUI = NodeInstances[WireData.ToNodeId]
 			if ToNodeUI and ToNodeUI.SetPortWired then
@@ -612,20 +650,20 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		end
 	end))
 
-	table.insert(ManagerConnections, WireManager.ConnectionStarted:Connect(function(ConnectionState)
+	EditorTrove:Add(WireManager.ConnectionStarted:Connect(function(ConnectionState)
 		PreviewWire = Wire.CreatePreview(CanvasInstance.Content, ConnectionState.FromPortType :: Types.PortType, ConnectionState.FromValueType)
 		UpdatePreviewWire()
 	end))
 
-	table.insert(ManagerConnections, WireManager.ConnectionCanceled:Connect(function()
+	EditorTrove:Add(WireManager.ConnectionCanceled:Connect(function()
 		ClearPreviewWire()
 	end))
 
-	table.insert(ManagerConnections, WireManager.ConnectionEnded:Connect(function()
+	EditorTrove:Add(WireManager.ConnectionEnded:Connect(function()
 		ClearPreviewWire()
 	end))
 
-	table.insert(ManagerConnections, WireSnapDetector.SnapChanged:Connect(function(SnapState)
+	EditorTrove:Add(WireSnapDetector.SnapChanged:Connect(function(SnapState)
 		for _, NodeUI in NodeInstances do
 			local AllPorts = NodeUI.GetAllPorts()
 			for _, PortAccessor in AllPorts do
@@ -644,11 +682,11 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		end
 	end))
 
-	table.insert(ManagerConnections, CommentManager.CommentAdded:Connect(function(CommentData: Types.CommentData)
+	EditorTrove:Add(CommentManager.CommentAdded:Connect(function(CommentData: Types.CommentData)
 		CreateCommentUI(CommentData)
 	end))
 
-	table.insert(ManagerConnections, CommentManager.CommentDeleted:Connect(function(CommentId: string)
+	EditorTrove:Add(CommentManager.CommentDeleted:Connect(function(CommentId: string)
 		local CommentUI = CommentInstances[CommentId]
 		if CommentUI then
 			CommentUI.Destroy()
@@ -656,7 +694,7 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		end
 	end))
 
-	table.insert(ManagerConnections, CommentManager.CommentPropertyChanged:Connect(function(CommentId: string, Key: string, Value: any)
+	EditorTrove:Add(CommentManager.CommentPropertyChanged:Connect(function(CommentId: string, Key: string, Value: any)
 		local CommentUI = CommentInstances[CommentId]
 		if CommentUI then
 			if Key == "Title" then
@@ -669,13 +707,13 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 		end
 	end))
 
-	table.insert(EditorConnections, UserInputService.InputChanged:Connect(function(Input: InputObject)
+	EditorTrove:Connect(UserInputService.InputChanged, function(Input: InputObject)
 		if Input.UserInputType == Enum.UserInputType.MouseMovement then
 			UpdatePreviewWire()
 		end
-	end))
+	end)
 
-	table.insert(EditorConnections, UserInputService.InputEnded:Connect(function(Input: InputObject)
+	EditorTrove:Connect(UserInputService.InputEnded, function(Input: InputObject)
 		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
 			if WireManager.IsConnecting() then
 				local ConnectionState = WireManager.GetConnectionState()
@@ -707,9 +745,9 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 				ClearPreviewWire()
 			end
 		end
-	end))
+	end)
 
-	table.insert(EditorConnections, UserInputService.InputBegan:Connect(function(Input: InputObject, GameProcessed: boolean)
+	EditorTrove:Connect(UserInputService.InputBegan, function(Input: InputObject, GameProcessed: boolean)
 		if GameProcessed then
 			return
 		end
@@ -728,7 +766,7 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 				end
 			end
 		end
-	end))
+	end)
 
 	EditorInstance = {
 		Frame = Container,
@@ -768,25 +806,8 @@ function EditorWindow.Create(Config: EditorWindowConfig): EditorWindowInstance
 	end
 
 	function EditorInstance.Destroy()
-		for _, Connection in EditorConnections do
-			Connection:Disconnect()
-		end
-		table.clear(EditorConnections)
-
-		for _, Connection in ManagerConnections do
-			if Connection.Disconnect then
-				Connection:Disconnect()
-			end
-		end
-		table.clear(ManagerConnections)
-
 		ClearCanvas()
-		ToolbarPanel.Destroy()
-		PalettePanel.Destroy()
-		PropertiesPanel.Destroy()
-		BranchListPanel.Destroy()
-		CanvasInstance.Destroy()
-		Container:Destroy()
+		EditorTrove:Destroy()
 	end
 
 	return EditorInstance

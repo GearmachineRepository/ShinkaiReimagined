@@ -1,6 +1,7 @@
 --!strict
 
 local Theme = require(script.Parent.Parent.Theme)
+local DropdownState = require(script.Parent.Parent.State.DropdownState)
 
 local ColorPicker = {}
 
@@ -38,6 +39,7 @@ local PRESET_COLORS = {
 function ColorPicker.Create(Config: ColorPickerConfig): ColorPickerInstance
 	local CurrentColor = Config.Color or Color3.fromRGB(50, 50, 55)
 	local IsOpen = false
+	local CurrentDropdownId: string? = nil
 	local BaseZIndex = Config.ZIndex or Theme.ZIndex.Panel
 
 	local Container = Instance.new("Frame")
@@ -90,6 +92,22 @@ function ColorPicker.Create(Config: ColorPickerConfig): ColorPickerInstance
 	Padding.Parent = Dropdown
 
 	local ColorButtons: { TextButton } = {}
+	local Connections: { RBXScriptConnection } = {}
+
+	local function CloseDropdown()
+		if CurrentDropdownId then
+			DropdownState.Close(CurrentDropdownId)
+			CurrentDropdownId = nil
+		end
+		IsOpen = false
+		Dropdown.Visible = false
+	end
+
+	local function OpenDropdown()
+		CurrentDropdownId = DropdownState.Open()
+		IsOpen = true
+		Dropdown.Visible = true
+	end
 
 	for Index, PresetColor in PRESET_COLORS do
 		local ColorButton = Instance.new("TextButton")
@@ -106,46 +124,48 @@ function ColorPicker.Create(Config: ColorPickerConfig): ColorPickerInstance
 
 		local ColorStroke = Theme.ApplyStroke(ColorButton, Theme.Colors.Border)
 
-		ColorButton.MouseEnter:Connect(function()
+		table.insert(Connections, ColorButton.MouseEnter:Connect(function()
 			ColorStroke.Color = Theme.Colors.Primary
 			ColorStroke.Thickness = Theme.StrokeSizes.Selected
-		end)
+		end))
 
-		ColorButton.MouseLeave:Connect(function()
+		table.insert(Connections, ColorButton.MouseLeave:Connect(function()
 			ColorStroke.Color = Theme.Colors.Border
 			ColorStroke.Thickness = Theme.StrokeSizes.Deslected
-		end)
+		end))
 
-		ColorButton.MouseButton1Click:Connect(function()
+		table.insert(Connections, ColorButton.MouseButton1Click:Connect(function()
 			CurrentColor = PresetColor
 			Button.BackgroundColor3 = CurrentColor
-			Dropdown.Visible = false
-			IsOpen = false
+			CloseDropdown()
 
 			if Config.OnChanged then
 				Config.OnChanged(CurrentColor)
 			end
-		end)
+		end))
 
 		table.insert(ColorButtons, ColorButton)
 	end
 
-	Button.MouseButton1Click:Connect(function()
-		IsOpen = not IsOpen
-		Dropdown.Visible = IsOpen
-	end)
+	table.insert(Connections, Button.MouseButton1Click:Connect(function()
+		if IsOpen then
+			CloseDropdown()
+		else
+			OpenDropdown()
+		end
+	end))
 
-	Button.MouseEnter:Connect(function()
+	table.insert(Connections, Button.MouseEnter:Connect(function()
 		Button.BackgroundColor3 = Color3.new(
 			math.min(1, CurrentColor.R + 0.1),
 			math.min(1, CurrentColor.G + 0.1),
 			math.min(1, CurrentColor.B + 0.1)
 		)
-	end)
+	end))
 
-	Button.MouseLeave:Connect(function()
+	table.insert(Connections, Button.MouseLeave:Connect(function()
 		Button.BackgroundColor3 = CurrentColor
-	end)
+	end))
 
 	if Config.Parent then
 		Container.Parent = Config.Parent
@@ -165,6 +185,11 @@ function ColorPicker.Create(Config: ColorPickerConfig): ColorPickerInstance
 	end
 
 	function PickerInstance.Destroy()
+		CloseDropdown()
+		for _, Connection in Connections do
+			Connection:Disconnect()
+		end
+		table.clear(Connections)
 		for _, ColorButton in ColorButtons do
 			ColorButton:Destroy()
 		end
