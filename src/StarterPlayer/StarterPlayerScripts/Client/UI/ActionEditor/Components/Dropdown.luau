@@ -125,7 +125,7 @@ function Dropdown.Create(Config: DropdownConfig): DropdownInstance
 		Button.Text = Option
 		Button.TextColor3 = Theme.Colors.Text
 		CloseDropdown()
-
+		DropdownState.Close()
 		if Config.OnSelected then
 			Config.OnSelected(Option)
 		end
@@ -223,6 +223,7 @@ function Dropdown.Create(Config: DropdownConfig): DropdownInstance
 		for _, Connection in Connections do
 			Connection:Disconnect()
 		end
+		CloseDropdown()
 		table.clear(Connections)
 		table.clear(OptionButtons)
 		Container:Destroy()
