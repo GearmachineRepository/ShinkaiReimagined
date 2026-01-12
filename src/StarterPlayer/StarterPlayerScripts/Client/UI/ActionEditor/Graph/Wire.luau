@@ -8,7 +8,7 @@ local Wire = {}
 local MIN_SEGMENTS = 10
 local MAX_SEGMENTS = 140
 
-local PIXELS_PER_SEGMENT_NEAR = 10
+local PIXELS_PER_SEGMENT_NEAR = 7
 local PIXELS_PER_SEGMENT_FAR = 18
 
 local DISTANCE_NEAR = 0
