@@ -1,10 +1,6 @@
 --!strict
 
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
-local Shared = ReplicatedStorage:WaitForChild("Shared")
 local BlockDefinitions = require(script.Parent.BlockDefinitions)
-local Enums = require(Shared.Enums)
 
 local ActionValidator = {}
 
@@ -15,33 +11,14 @@ local MAX_BLOCKS = 50
 local MAX_BRANCHES = 10
 local MAX_SIGNAL_LENGTH = 32
 local MAX_ID_LENGTH = 64
-local MAX_DAMAGE = 100
-local MAX_STUN = 5
-local MAX_WAIT = 10
 local MAX_COMMENTS = 50
 local MAX_WIRES = 200
 
 local ALLOWED_BLOCK_TYPES: { [string]: boolean } = {}
-for BlockType in pairs(Enums.Combat.BlockType) do
+
+for BlockType, _ in BlockDefinitions.GetAll() do
 	ALLOWED_BLOCK_TYPES[BlockType] = true
 end
-
-ALLOWED_BLOCK_TYPES["BranchStart"] = true
-ALLOWED_BLOCK_TYPES["Constant"] = true
-ALLOWED_BLOCK_TYPES["Compare"] = true
-ALLOWED_BLOCK_TYPES["Math"] = true
-ALLOWED_BLOCK_TYPES["Random"] = true
-ALLOWED_BLOCK_TYPES["GetHealth"] = true
-ALLOWED_BLOCK_TYPES["GetDistance"] = true
-ALLOWED_BLOCK_TYPES["GetTag"] = true
-ALLOWED_BLOCK_TYPES["SignalToBool"] = true
-ALLOWED_BLOCK_TYPES["Clamp"] = true
-ALLOWED_BLOCK_TYPES["Lerp"] = true
-ALLOWED_BLOCK_TYPES["Abs"] = true
-ALLOWED_BLOCK_TYPES["Negate"] = true
-ALLOWED_BLOCK_TYPES["BoolNot"] = true
-ALLOWED_BLOCK_TYPES["BoolAnd"] = true
-ALLOWED_BLOCK_TYPES["BoolOr"] = true
 
 local function ValidateString(Value: any, MaxLength: number): string?
 	if type(Value) ~= "string" then
@@ -99,7 +76,8 @@ local function ValidateBlock(Block: any): any?
 	end
 
 	local BlockType = Block.BlockType
-	if not ALLOWED_BLOCK_TYPES[BlockType] then
+	local Definition = BlockDefinitions.Get(BlockType)
+	if not Definition then
 		return nil
 	end
 
@@ -132,157 +110,53 @@ local function ValidateBlock(Block: any): any?
 
 	Clean.RequireAll = ValidateBoolean(Block.RequireAll, true)
 
-	if BlockType == "Wait" then
-		Clean.Time = ValidateNumber(Block.Time, 0, MAX_WAIT, 0.1)
+	for _, PropDef in Definition.Properties do
+		local Key = PropDef.Key
+		local Value = Block[Key]
 
-	elseif BlockType == "Hitbox" then
-		Clean.X = ValidateNumber(Block.X, -20, 20, 0)
-		Clean.Y = ValidateNumber(Block.Y, -20, 20, 0)
-		Clean.Z = ValidateNumber(Block.Z, -20, 20, 4)
-		Clean.SizeX = ValidateNumber(Block.SizeX, 1, 20, 6)
-		Clean.SizeY = ValidateNumber(Block.SizeY, 1, 20, 6)
-		Clean.SizeZ = ValidateNumber(Block.SizeZ, 1, 20, 6)
-		Clean.Damage = ValidateNumber(Block.Damage, 0, MAX_DAMAGE, 5)
-		Clean.Stun = ValidateNumber(Block.Stun, 0, MAX_STUN, 0.2)
-		Clean.AttackType = ValidateString(Block.AttackType, 16) or "Melee"
-		Clean.Blockable = ValidateBoolean(Block.Blockable, true)
-		Clean.Block360 = ValidateBoolean(Block.Block360, false)
-		Clean.CancelEnemy = ValidateBoolean(Block.CancelEnemy, true)
+		if PropDef.Type == "Number" then
+			local Min = PropDef.Min or -9999
+			local Max = PropDef.Max or 9999
+			local Default = PropDef.Default or 0
+			Clean[Key] = ValidateNumber(Value, Min, Max, Default)
 
-		if type(Block.Outputs) == "table" then
-			Clean.Outputs = {
-				OnHit = ValidateString(Block.Outputs.OnHit, MAX_SIGNAL_LENGTH),
-				OnMiss = ValidateString(Block.Outputs.OnMiss, MAX_SIGNAL_LENGTH),
-				Duration = ValidateNumber(Block.Outputs.Duration, 0, 10, nil),
-			}
-		end
+		elseif PropDef.Type == "Boolean" then
+			local Default = if PropDef.Default ~= nil then PropDef.Default else false
+			Clean[Key] = ValidateBoolean(Value, Default)
 
-	elseif BlockType == "Animation" then
-		Clean.AnimationId = ValidateString(Block.AnimationId, 64)
-		Clean.Speed = ValidateNumber(Block.Speed, 0.1, 3, 1)
-		Clean.Loop = ValidateBoolean(Block.Loop, false)
+		elseif PropDef.Type == "String" or PropDef.Type == "AssetId" then
+			local Default = PropDef.Default or ""
+			local Validated = ValidateStringAllowEmpty(Value, 256)
+			Clean[Key] = if Validated ~= nil then Validated else Default
 
-	elseif BlockType == "Sound" then
-		Clean.SoundId = ValidateString(Block.SoundId, 64)
-		Clean.Volume = ValidateNumber(Block.Volume, 0, 2, 1)
-		Clean.Speed = ValidateNumber(Block.Speed, 0.1, 3, 1)
-
-	elseif BlockType == "Velocity" then
-		Clean.X = ValidateNumber(Block.X, -100, 100, 0)
-		Clean.Y = ValidateNumber(Block.Y, -100, 100, 0)
-		Clean.Z = ValidateNumber(Block.Z, -100, 100, 0)
-		Clean.Time = ValidateNumber(Block.Time, 0, 2, 0.2)
-		Clean.Fade = ValidateBoolean(Block.Fade, false)
-		Clean.Track = ValidateBoolean(Block.Track, false)
-
-	elseif BlockType == "Signal" then
-		Clean.SignalId = ValidateString(Block.SignalId, MAX_SIGNAL_LENGTH)
-		Clean.Duration = ValidateNumber(Block.Duration, 0, 10, nil)
-		Clean.Clear = ValidateBoolean(Block.Clear, false)
-
-	elseif BlockType == "AndGate" or BlockType == "OrGate" then
-		if type(Block.Inputs) == "table" then
-			Clean.Inputs = {}
-			for _, Input in Block.Inputs do
-				if #Clean.Inputs >= 8 then
-					break
-				end
-				local ValidInput = ValidateString(Input, MAX_SIGNAL_LENGTH)
-				if ValidInput then
-					table.insert(Clean.Inputs, ValidInput)
-				end
+		elseif PropDef.Type == "Dropdown" or PropDef.Type == "BranchDropdown" then
+			local Default = PropDef.Default or ""
+			if type(Value) == "string" then
+				local Validated = ValidateStringAllowEmpty(Value, 64)
+				Clean[Key] = if Validated ~= nil then Validated else Default
+			else
+				Clean[Key] = Default
 			end
 		end
-		Clean.Threshold = ValidateNumber(Block.Threshold, 1, 8, nil)
-		Clean.Output = ValidateString(Block.Output, MAX_SIGNAL_LENGTH)
-		Clean.Duration = ValidateNumber(Block.Duration, 0, 10, nil)
+	end
 
-	elseif BlockType == "NotGate" then
-		Clean.Input = ValidateString(Block.Input, MAX_SIGNAL_LENGTH)
-		Clean.Output = ValidateString(Block.Output, MAX_SIGNAL_LENGTH)
-		Clean.Duration = ValidateNumber(Block.Duration, 0, 10, nil)
-
-	elseif BlockType == "Timer" then
-		Clean.Input = ValidateString(Block.Input, MAX_SIGNAL_LENGTH)
-		Clean.Time = ValidateNumber(Block.Time, 0.1, MAX_WAIT, 1)
-		Clean.Output = ValidateString(Block.Output, MAX_SIGNAL_LENGTH)
-		Clean.OutputDuration = ValidateNumber(Block.OutputDuration, 0, 10, nil)
-
-	elseif BlockType == "Counter" then
-		Clean.Input = ValidateString(Block.Input, MAX_SIGNAL_LENGTH)
-		Clean.Threshold = ValidateNumber(Block.Threshold, 1, 100, 3)
-		Clean.Output = ValidateString(Block.Output, MAX_SIGNAL_LENGTH)
-		Clean.Duration = ValidateNumber(Block.Duration, 0, 10, nil)
-		Clean.ResetOnThreshold = ValidateBoolean(Block.ResetOnThreshold, true)
-
-	elseif BlockType == "HitCancel" then
-		Clean.Time = ValidateNumber(Block.Time, 0, 5, 0.5)
-		Clean.Flip = ValidateBoolean(Block.Flip, false)
-		Clean.Endlag = ValidateNumber(Block.Endlag, 0, 2, 0)
-		Clean.Branch = ValidateString(Block.Branch, 32)
-
-	elseif BlockType == "AddHealth" then
-		Clean.Amount = ValidateNumber(Block.Amount, -50, 50, 5)
-
-	elseif BlockType == "Branch" then
-		Clean.BranchName = ValidateString(Block.BranchName, 32)
-
-	elseif BlockType == "Action" or BlockType == "SubAction" then
-		Clean.ActionId = ValidateString(Block.ActionId, 32)
-		Clean.Speed = ValidateNumber(Block.Speed, 0.1, 3, 1)
-		Clean.CancelLast = ValidateBoolean(Block.CancelLast, false)
-		Clean.HoldFor = ValidateNumber(Block.HoldFor, 0, 5, 0)
-
-	elseif BlockType == "Constant" then
-		Clean.Type = ValidateString(Block.Type, 16) or "Number"
-		Clean.NumberValue = ValidateNumber(Block.NumberValue, -9999, 9999, 0)
-		Clean.BooleanValue = ValidateBoolean(Block.BooleanValue, false)
-		Clean.StringValue = ValidateStringAllowEmpty(Block.StringValue, 64) or ""
-
-	elseif BlockType == "Compare" then
-		Clean.A = ValidateNumber(Block.A, -9999, 9999, 0)
-		Clean.B = ValidateNumber(Block.B, -9999, 9999, 0)
-		Clean.Operator = ValidateString(Block.Operator, 4) or ">"
-
-	elseif BlockType == "Math" then
-		Clean.A = ValidateNumber(Block.A, -9999, 9999, 0)
-		Clean.B = ValidateNumber(Block.B, -9999, 9999, 0)
-		Clean.Operator = ValidateString(Block.Operator, 4) or "+"
-
-	elseif BlockType == "Random" then
-		Clean.Min = ValidateNumber(Block.Min, -9999, 9999, 0)
-		Clean.Max = ValidateNumber(Block.Max, -9999, 9999, 1)
-		Clean.Integer = ValidateBoolean(Block.Integer, false)
-
-	elseif BlockType == "GetHealth" then
-		Clean.Target = ValidateString(Block.Target, 16) or "Self"
-
-	elseif BlockType == "GetTag" then
-		Clean.Tag = ValidateStringAllowEmpty(Block.Tag, 32) or ""
-
-	elseif BlockType == "Clamp" then
-		Clean.Value = ValidateNumber(Block.Value, -9999, 9999, 0)
-		Clean.Min = ValidateNumber(Block.Min, -9999, 9999, 0)
-		Clean.Max = ValidateNumber(Block.Max, -9999, 9999, 1)
-
-	elseif BlockType == "Lerp" then
-		Clean.From = ValidateNumber(Block.From, -9999, 9999, 0)
-		Clean.To = ValidateNumber(Block.To, -9999, 9999, 1)
-		Clean.Alpha = ValidateNumber(Block.Alpha, 0, 1, 0.5)
-
-	elseif BlockType == "Abs" or BlockType == "Negate" then
-		Clean.Value = ValidateNumber(Block.Value, -9999, 9999, 0)
-
-	elseif BlockType == "BoolNot" then
-		Clean.Value = ValidateBoolean(Block.Value, false)
-
-	elseif BlockType == "BoolAnd" or BlockType == "BoolOr" then
-		Clean.A = ValidateBoolean(Block.A, false)
-		Clean.B = ValidateBoolean(Block.B, false)
+	if Block.Outputs and type(Block.Outputs) == "table" then
+		local ValidOutputs = {}
+		for OutputName, SignalId in Block.Outputs do
+			local ValidOutput = ValidateString(OutputName, 32)
+			local ValidSignal = ValidateString(SignalId, MAX_SIGNAL_LENGTH)
+			if ValidOutput and ValidSignal then
+				ValidOutputs[ValidOutput] = ValidSignal
+			end
+		end
+		if next(ValidOutputs) then
+			Clean.Outputs = ValidOutputs
+		end
 	end
 
 	return Clean
 end
+
 
 local function ValidateNode(NodeId: string, NodeData: any): any?
 	if type(NodeData) ~= "table" then
@@ -290,7 +164,8 @@ local function ValidateNode(NodeId: string, NodeData: any): any?
 	end
 
 	local BlockType = NodeData.BlockType
-	if not ALLOWED_BLOCK_TYPES[BlockType] then
+	local Definition = BlockDefinitions.Get(BlockType)
+	if not Definition then
 		return nil
 	end
 
@@ -305,21 +180,33 @@ local function ValidateNode(NodeId: string, NodeData: any): any?
 		return Clean
 	end
 
-	local BlockData: any = { BlockType = BlockType }
-	for Key, Value in NodeData do
-		if Key ~= "NodeId" and Key ~= "EditorPosition" then
-			BlockData[Key] = Value
-		end
-	end
+	for _, PropDef in Definition.Properties do
+		local Key = PropDef.Key
+		local Value = NodeData[Key]
 
-	local ValidatedBlock = ValidateBlock(BlockData)
-	if not ValidatedBlock then
-		return nil
-	end
+		if PropDef.Type == "Number" then
+			local Min = PropDef.Min or -9999
+			local Max = PropDef.Max or 9999
+			local Default = PropDef.Default or 0
+			Clean[Key] = ValidateNumber(Value, Min, Max, Default)
 
-	for Key, Value in ValidatedBlock do
-		if Key ~= "BlockType" then
-			Clean[Key] = Value
+		elseif PropDef.Type == "Boolean" then
+			local Default = if PropDef.Default ~= nil then PropDef.Default else false
+			Clean[Key] = ValidateBoolean(Value, Default)
+
+		elseif PropDef.Type == "String" or PropDef.Type == "AssetId" then
+			local Default = PropDef.Default or ""
+			local Validated = ValidateStringAllowEmpty(Value, 256)
+			Clean[Key] = if Validated ~= nil then Validated else Default
+
+		elseif PropDef.Type == "Dropdown" or PropDef.Type == "BranchDropdown" then
+			local Default = PropDef.Default or ""
+			if type(Value) == "string" then
+				local Validated = ValidateStringAllowEmpty(Value, 64)
+				Clean[Key] = if Validated ~= nil then Validated else Default
+			else
+				Clean[Key] = Default
+			end
 		end
 	end
 

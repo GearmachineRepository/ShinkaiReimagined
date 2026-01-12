@@ -332,17 +332,15 @@ function NodeRow.Create(Config: RowConfig): RowInstance
 	function RowInstance.SetHighlighted(Highlighted: boolean)
 		if PortCircle then
 			if Highlighted then
-				PortCircle.BackgroundColor3 = Theme.Colors.BorderFocus
 				local Inner = PortCircle:FindFirstChild("InnerCircle") :: Frame?
 				if Inner then
-					Inner.BackgroundColor3 = DarkenColor(Theme.Colors.BorderFocus, INNER_DARKEN_FACTOR)
+					Inner.BackgroundColor3 = DarkenColor(PortCircle.BackgroundColor3, INNER_DARKEN_FACTOR)
 				end
 				PortCircle.Size = UDim2.fromOffset(PORT_RADIUS * 2.5, PORT_RADIUS * 2.5)
 			else
-				PortCircle.BackgroundColor3 = PortColor
 				local Inner = PortCircle:FindFirstChild("InnerCircle") :: Frame?
 				if Inner then
-					Inner.BackgroundColor3 = DarkenColor(PortColor, INNER_DARKEN_FACTOR)
+					Inner.BackgroundColor3 = DarkenColor(PortCircle.BackgroundColor3, INNER_DARKEN_FACTOR)
 				end
 				PortCircle.Size = UDim2.fromOffset(PORT_RADIUS * 2, PORT_RADIUS * 2)
 			end

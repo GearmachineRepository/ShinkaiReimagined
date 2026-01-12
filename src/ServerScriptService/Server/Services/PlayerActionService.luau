@@ -11,6 +11,7 @@ local Packets = require(Shared.Network.Packets)
 local Trove = Packages.Trove
 local Signal = Packages.Signal
 
+local ActionExecutor = Combat.ActionExecutor
 local ActionValidator = Combat.ActionValidator
 local ActionRegistry = Combat.ActionRegistry
 
@@ -179,6 +180,8 @@ function PlayerActionManager.CreateAction(Player: Player, RawAction: any): (bool
 
     Actions[ActionId] = ValidAction
 
+    ActionExecutor.ClearCache(ActionId)
+
     PlayerActionManager.ActionCreated:Fire(Player, ActionId, ValidAction)
 
     return true, ActionId
@@ -214,6 +217,8 @@ function PlayerActionManager.UpdateAction(Player: Player, RawAction: any): (bool
 
     Actions[ActionId] = ValidAction
 
+    ActionExecutor.ClearCache(ActionId)
+
     if ActionRegistry.Has(ActionId) then
         ActionRegistry.Unregister(ActionId)
         ActionRegistry.Register(ValidAction)
@@ -239,6 +244,8 @@ function PlayerActionManager.DeleteAction(Player: Player, ActionId: string): boo
     end
 
     Actions[ActionId] = nil
+
+    ActionExecutor.ClearCache(ActionId)
 
     PlayerActionManager.ActionDeleted:Fire(Player, ActionId)
 

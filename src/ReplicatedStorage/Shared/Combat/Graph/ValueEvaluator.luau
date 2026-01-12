@@ -246,6 +246,29 @@ Evaluators.GetElapsedTime = function(_Context: EvaluationContext, _Properties: {
 	return { Time = 0 }
 end
 
+Evaluators.Select = function(Context: EvaluationContext, Properties: { [string]: any }): EvaluationResult
+	local Condition = Context.ResolveInput("Condition")
+	if Condition == nil then
+		Condition = Properties.Condition
+	end
+	if Condition == nil then
+		Condition = true
+	end
+
+	local ValueA = Context.ResolveInput("A")
+	if ValueA == nil then
+		ValueA = Properties.A or 0
+	end
+
+	local ValueB = Context.ResolveInput("B")
+	if ValueB == nil then
+		ValueB = Properties.B or 0
+	end
+
+	local Result = if Condition then ValueA else ValueB
+	return { Result = Result }
+end
+
 function ValueEvaluator.Evaluate(
 	BlockType: string,
 	Context: EvaluationContext,

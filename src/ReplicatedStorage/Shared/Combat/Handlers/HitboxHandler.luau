@@ -31,6 +31,18 @@ local function DetectTargets(Origin: CFrame, Size: Vector3, Exclude: Model): { M
 
 	local Parts = workspace:GetPartBoundsInBox(Origin, Size, OverlapParams)
 
+	local DebugPart = Instance.new("Part")
+	DebugPart.Name = "DebugPart"
+	DebugPart.BrickColor = BrickColor.Red()
+	DebugPart.Transparency = 0.5
+	DebugPart.CanCollide = false
+	DebugPart.CanQuery = false
+	DebugPart.Anchored = true
+	DebugPart.CFrame = Origin
+	DebugPart.Size = Size
+	DebugPart.Parent = workspace
+	game.Debris:AddItem(DebugPart, 1)
+
 	for _, Part in Parts do
 		if Part.Name ~= "HumanoidRootPart" then
 			continue

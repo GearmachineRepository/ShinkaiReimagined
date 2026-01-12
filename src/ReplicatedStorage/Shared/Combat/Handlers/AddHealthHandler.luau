@@ -19,6 +19,7 @@ function AddHealthHandler.Execute(Block: Block, Context: ExecutionContext): Hand
         return nil
     end
 
+    print(Block, Block.Amount)
     local Amount = Block.Amount or 5
     local Humanoid = Context.Entity.Humanoid
 

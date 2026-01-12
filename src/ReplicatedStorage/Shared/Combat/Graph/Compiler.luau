@@ -60,7 +60,9 @@ export type CompiledBranch = {
 	EntryNodeId: string?,
 	Nodes: { [string]: CompiledNode },
 	SignalListeners: { [string]: { SignalListener } },
+	SignalInputs: { [string]: { [string]: { FromNodeId: string, FromPortName: string } } }?,
 	ValueEvaluationOrder: { string },
+	DebugWatchers: { [string]: { Label: string, PrintNodeId: string } }?,
 }
 
 export type CompiledGraph = {
@@ -84,6 +86,69 @@ local function GetPortDefinition(BlockType: string, PortName: string, Direction:
 	end
 
 	return nil
+end
+
+local function BuildSignalInputs(
+	Nodes: { [string]: GraphNode },
+	Wires: { GraphWire }
+): { [string]: { [string]: { FromNodeId: string, FromPortName: string } } }
+	local SignalInputMap: { [string]: { [string]: { FromNodeId: string, FromPortName: string } } } = {}
+
+	for _, Wire in Wires do
+		local FromNode = Nodes[Wire.FromNode]
+		local ToNode = Nodes[Wire.ToNode]
+		if not FromNode or not ToNode then
+			continue
+		end
+
+		local FromPort = GetPortDefinition(FromNode.BlockType, Wire.FromPort, "Output")
+		if not FromPort or FromPort.PortType ~= "Signal" then
+			continue
+		end
+
+		if not SignalInputMap[Wire.ToNode] then
+			SignalInputMap[Wire.ToNode] = {}
+		end
+
+		SignalInputMap[Wire.ToNode][Wire.ToPort] = {
+			FromNodeId = Wire.FromNode,
+			FromPortName = Wire.FromPort,
+		}
+	end
+
+	return SignalInputMap
+end
+
+local function BuildDebugWatchers(
+	Nodes: { [string]: GraphNode },
+	Wires: { GraphWire }
+): { [string]: { Label: string, PrintNodeId: string } }
+	local Watchers: { [string]: { Label: string, PrintNodeId: string } } = {}
+
+	for _, Wire in Wires do
+		local ToNode = Nodes[Wire.ToNode]
+		if not ToNode then
+			continue
+		end
+
+		if ToNode.BlockType ~= "Print" then
+			continue
+		end
+
+		local WatchKey = Wire.FromNode .. ":" .. Wire.FromPort
+		local Label = ToNode.Label or "Print"
+
+		if ToNode.Properties and ToNode.Properties.Label then
+			Label = ToNode.Properties.Label
+		end
+
+		Watchers[WatchKey] = {
+			Label = Label,
+			PrintNodeId = Wire.ToNode,
+		}
+	end
+
+	return Watchers
 end
 
 local function GetDefaultProperties(BlockType: string): { [string]: any }
@@ -291,6 +356,8 @@ function Compiler.CompileBranch(BranchName: string, Branch: GraphBranch): Compil
 	local FlowAdjacency = BuildFlowAdjacency(Nodes, Wires)
 	local SignalListeners = BuildSignalListeners(Nodes, Wires)
 	local ValueOrder = ComputeValueEvaluationOrder(Nodes, Wires)
+	local DebugWatchers = BuildDebugWatchers(Nodes, Wires)
+	local SignalInputs = BuildSignalInputs(Nodes, Wires)
 
 	local CompiledNodes: { [string]: CompiledNode } = {}
 
@@ -330,6 +397,8 @@ function Compiler.CompileBranch(BranchName: string, Branch: GraphBranch): Compil
 		Nodes = CompiledNodes,
 		SignalListeners = SignalListeners,
 		ValueEvaluationOrder = ValueOrder,
+		DebugWatchers = DebugWatchers,
+		SignalInputs = SignalInputs,
 	}
 end
 

@@ -19,6 +19,20 @@ function ToolRegistry.Register(ToolDefinition: any)
     end
 end
 
+function ToolRegistry.Unregister(ToolId: string)
+	local ToolDef = Tools[ToolId]
+	if not ToolDef then
+		return
+	end
+
+	local ActionId = ToolDef.ActionId :: string?
+	if ActionId and ActionToTool[ActionId] == ToolDef then
+		ActionToTool[ActionId] = nil
+	end
+
+	Tools[ToolId] = nil
+end
+
 function ToolRegistry.Get(ToolId: string): any?
     return Tools[ToolId]
 end

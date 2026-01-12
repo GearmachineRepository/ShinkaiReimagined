@@ -24,7 +24,6 @@ ActionEditorController.Dependencies = { "PlayerActionController" }
 ActionEditorController.EditorOpened = Signal.new()
 ActionEditorController.EditorClosed = Signal.new()
 ActionEditorController.ActionSaved = Signal.new()
-ActionEditorController.ActionTested = Signal.new()
 
 local ControllerTrove: typeof(Trove.new()) = nil :: any
 local ScreenGui: ScreenGui = nil :: any
@@ -82,16 +81,10 @@ local function OnTest(ActionData: any)
 		return
 	end
 
-	local ActionId = ActionData.ActionId
-	local IsNewAction = not ActionId or ActionId == "" or not PlayerActionController.GetAction(ActionId)
-
-	if IsNewAction then
-		PlayerActionController.CreateAction(ActionData)
-	else
-		PlayerActionController.UpdateAction(ActionData)
+	local Saved = OnSave(ActionData)
+	if Saved then
+		print("[ActionEditor] Action saved. Use the Equip Cube in the world to equip it as a tool.")
 	end
-
-	ActionEditorController.ActionTested:Fire(ActionData)
 end
 
 local function OnLoad(ActionId: string): any?
@@ -102,10 +95,10 @@ local function GetActionsList(): { { Id: string, Name: string } }
 	local AllActions = PlayerActionController.GetAllActions()
 	local List = {}
 
-	for ActionId, ActionData in AllActions do
+	for CurrentActionId, ActionData in AllActions do
 		table.insert(List, {
-			Id = ActionId,
-			Name = ActionData.DisplayName or ActionId,
+			Id = CurrentActionId,
+			Name = ActionData.DisplayName or CurrentActionId,
 		})
 	end
 
@@ -148,11 +141,11 @@ function ActionEditorController.Start()
 		end
 	end)
 
-	ControllerTrove:Connect(PlayerActionController.ActionAdded :: any, function(ActionId: string, _ActionData: any)
+	ControllerTrove:Connect(PlayerActionController.ActionAdded :: any, function(CurrentActionId: string, _ActionData: any)
 		if EditorInstance then
-			local CurrentActionId = EditorInstance.GetActionId()
-			if not CurrentActionId or CurrentActionId == "" then
-				EditorInstance.SetActionId(ActionId)
+			local EditorActionId = EditorInstance.GetActionId()
+			if not EditorActionId or EditorActionId == "" then
+				EditorInstance.SetActionId(CurrentActionId)
 			end
 		end
 	end)

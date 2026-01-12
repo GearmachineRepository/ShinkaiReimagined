@@ -97,16 +97,13 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 		BlockType = "Gate",
 		Category = "Flow",
 		DisplayName = "Gate",
-		Description = "Blocks flow until the required signal is active.",
+		Description = "Triggers output flow when the connected signal fires.",
 		Color = COLORS.Flow,
 		Ports = {
-			{ Name = "In", Direction = "Input", PortType = "Flow" },
-			{ Name = "Out", Direction = "Output", PortType = "Flow" },
 			{ Name = "Signal", Direction = "Input", PortType = "Signal" },
+			{ Name = "Out", Direction = "Output", PortType = "Flow" },
 		},
-		Properties = {
-			{ Key = "Timeout", Label = "Timeout", Type = "Number", Default = 0, Min = 0, Max = 10, Tooltip = "Max wait time. 0 = no timeout." },
-		},
+		Properties = {},
 	},
 
 	Condition = {
@@ -657,6 +654,21 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 			{ Key = "B", Label = "If False", Type = "Number", Default = 0, Min = -9999, Max = 9999, Tooltip = "Value when false.", Wireable = true },
 		},
 	},
+
+	Print = {
+		BlockType = "Print",
+		Category = "Utility",
+		DisplayName = "Print",
+		Description = "Watches a value and prints it when evaluated. Connect to any output to observe it.",
+		Color = COLORS.Utility,
+		Pure = false,
+		Ports = {
+			{ Name = "Watch", Direction = "Input", PortType = "Value", ValueType = "Any" },
+		},
+		Properties = {
+			{ Key = "Label", Label = "Label", Type = "String", Default = "Print", Tooltip = "Label shown in output." },
+		},
+	},
 }
 
 local CATEGORIES = {
@@ -667,7 +679,7 @@ local CATEGORIES = {
 	{ Name = "Value", Types = { "Constant", "GetHealth", "GetDistance", "Compare", "Math", "Random", "Clamp", "Lerp", "Abs", "Negate", "Select" } },
 	{ Name = "Boolean", Types = { "BoolNot", "BoolAnd", "BoolOr", "SignalToBool", "GetTag" } },
 	{ Name = "Advanced", Types = { "SubAction" } },
-	{ Name = "Utility", Types = { "Comment" } },
+	{ Name = "Utility", Types = { "Comment", "Print" } },
 }
 
 function BlockDefinitions.Get(BlockType: string): BlockDefinition?

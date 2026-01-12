@@ -269,4 +269,25 @@ return {
         "PlayerActionRemoved",
         Packet.String               -- ActionId
     ),
+
+	   -- ACTION EQUIP CUBES TESTTTINNGGG
+		PlayerActionEquipPrompt = Packet(
+			"PlayerActionEquipPrompt"
+		),
+
+		PlayerActionUnequipPrompt = Packet(
+			"PlayerActionUnequipPrompt"
+		),
+
+		PlayerActionEquipTool = Packet(
+			"PlayerActionEquipTool",
+			Packet.String               -- ActionId
+		),
+
+		PlayerActionEquipToolResult = Packet(
+			"PlayerActionEquipToolResult",
+			Packet.Boolean8,            -- Success
+			Packet.String               -- ActionId or ErrorReason
+		),
+
 }
