@@ -4,7 +4,7 @@ local BlockDefinitions = {}
 
 export type PortDirection = "Input" | "Output"
 export type PortType = "Flow" | "Signal" | "Value"
-export type ValueType = "Number" | "Boolean" | "String" | "Vector3" | "Any"
+export type ValueType = "Number" | "Boolean" | "String" | "Vector3" | "Entity" | "EntityList" | "Any"
 
 export type PortDefinition = {
 	Name: string,
@@ -48,6 +48,8 @@ local COLORS = {
 	Utility = Color3.fromRGB(90, 90, 95),
 	Condition = Color3.fromRGB(89, 134, 89),
 	Value = Color3.fromRGB(106, 135, 89),
+	Boolean = Color3.fromRGB(180, 100, 100),
+	Entity = Color3.fromRGB(100, 160, 200),
 }
 
 local DEFINITIONS: { [string]: BlockDefinition } = {
@@ -110,7 +112,7 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 		BlockType = "Condition",
 		Category = "Flow",
 		DisplayName = "Condition",
-		Description = "Branches based on a runtime condition check.",
+		Description = "Branches based on a boolean condition.",
 		Color = COLORS.Condition,
 		Ports = {
 			{ Name = "In", Direction = "Input", PortType = "Flow" },
@@ -119,10 +121,20 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 			{ Name = "Condition", Direction = "Input", PortType = "Value", ValueType = "Boolean", PropertyKey = "ConditionValue" },
 		},
 		Properties = {
-			{ Key = "Check", Label = "Check", Type = "Dropdown", Default = "IsGrounded", Options = { "IsGrounded", "IsAirborne", "HasTarget", "IsBlocking", "IsStunned", "HealthAbove", "HealthBelow", "TargetInRange", "Custom" }, Tooltip = "Condition to check." },
-			{ Key = "Value", Label = "Value", Type = "Number", Default = 50, Min = 0, Max = 100, Tooltip = "Threshold value for Health/Range checks.", Wireable = true },
-			{ Key = "ConditionValue", Label = "Custom", Type = "Boolean", Default = false, Tooltip = "Custom condition from wire.", Wireable = true },
+			{ Key = "ConditionValue", Label = "Condition", Type = "Boolean", Default = false, Tooltip = "Condition from wire.", Wireable = true },
 		},
+	},
+
+	Cancel = {
+		BlockType = "Cancel",
+		Category = "Flow",
+		DisplayName = "Cancel",
+		Description = "Cancels the current action execution.",
+		Color = COLORS.Flow,
+		Ports = {
+			{ Name = "In", Direction = "Input", PortType = "Flow" },
+		},
+		Properties = {},
 	},
 
 	Hitbox = {
@@ -136,6 +148,7 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 			{ Name = "Out", Direction = "Output", PortType = "Flow" },
 			{ Name = "OnHit", Direction = "Output", PortType = "Signal" },
 			{ Name = "OnMiss", Direction = "Output", PortType = "Signal" },
+			{ Name = "Targets", Direction = "Output", PortType = "Value", ValueType = "EntityList" },
 			{ Name = "Damage", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "Damage" },
 			{ Name = "Stun", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "Stun" },
 		},
@@ -152,10 +165,10 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 		},
 	},
 
-	HitCancel = {
-		BlockType = "HitCancel",
+	HitWindow = {
+		BlockType = "HitWindow",
 		Category = "Combat",
-		DisplayName = "Hit Cancel",
+		DisplayName = "Hit Window",
 		Description = "Waits for a time window, then branches based on hit/miss.",
 		Color = COLORS.Combat,
 		Ports = {
@@ -169,19 +182,21 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 		},
 	},
 
-	AddHealth = {
-		BlockType = "AddHealth",
+	ModifyHealth = {
+		BlockType = "ModifyHealth",
 		Category = "Combat",
-		DisplayName = "Add Health",
-		Description = "Adds or removes health from self. Negative values deal damage.",
+		DisplayName = "Modify Health",
+		Description = "Adds or removes health from a target. Negative values deal damage.",
 		Color = COLORS.Combat,
 		Ports = {
 			{ Name = "In", Direction = "Input", PortType = "Flow" },
 			{ Name = "Out", Direction = "Output", PortType = "Flow" },
+			{ Name = "Target", Direction = "Input", PortType = "Value", ValueType = "Entity", PropertyKey = "TargetMode" },
 			{ Name = "Amount", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "Amount" },
 		},
 		Properties = {
-			{ Key = "Amount", Label = "Amount", Type = "Number", Default = 5, Min = -100, Max = 100, Tooltip = "Health to add.", Wireable = true },
+			{ Key = "TargetMode", Label = "Target", Type = "Dropdown", Default = "Self", Options = { "Self", "LastHit" }, Tooltip = "Who to modify." },
+			{ Key = "Amount", Label = "Amount", Type = "Number", Default = 10, Min = -1000, Max = 1000, Tooltip = "Health to add (flat value).", Wireable = true },
 		},
 	},
 
@@ -199,8 +214,9 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 		},
 		Properties = {
 			{ Key = "AnimationId", Label = "Animation ID", Type = "AssetId", Default = "", Tooltip = "Roblox animation asset ID." },
-			{ Key = "Speed", Label = "Speed", Type = "Number", Default = 1, Min = 0.1, Max = 5, Tooltip = "Playback speed.", Wireable = true },
-			{ Key = "Loop", Label = "Loop", Type = "Boolean", Default = false, Tooltip = "Loop until action ends." },
+			{ Key = "Speed", Label = "Speed", Type = "Number", Default = 1, Min = 0.1, Max = 3, Tooltip = "Playback speed.", Wireable = true },
+			{ Key = "Loop", Label = "Loop", Type = "Boolean", Default = false, Tooltip = "Loop the animation." },
+			{ Key = "Wait", Label = "Wait", Type = "Boolean", Default = true, Tooltip = "Wait for animation to finish." },
 		},
 	},
 
@@ -218,7 +234,7 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 		Properties = {
 			{ Key = "SoundId", Label = "Sound ID", Type = "AssetId", Default = "", Tooltip = "Roblox sound asset ID." },
 			{ Key = "Volume", Label = "Volume", Type = "Number", Default = 1, Min = 0, Max = 2, Tooltip = "Volume level.", Wireable = true },
-			{ Key = "Speed", Label = "Speed", Type = "Number", Default = 1, Min = 0.1, Max = 3, Tooltip = "Playback speed." },
+			{ Key = "Pitch", Label = "Pitch", Type = "Number", Default = 1, Min = 0.5, Max = 2, Tooltip = "Pitch multiplier." },
 		},
 	},
 
@@ -226,7 +242,7 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 		BlockType = "Velocity",
 		Category = "Effects",
 		DisplayName = "Velocity",
-		Description = "Applies a velocity impulse to move the character.",
+		Description = "Applies velocity to the entity.",
 		Color = COLORS.Effects,
 		Ports = {
 			{ Name = "In", Direction = "Input", PortType = "Flow" },
@@ -245,8 +261,8 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 		},
 	},
 
-	Signal = {
-		BlockType = "Signal",
+	EmitSignal = {
+		BlockType = "EmitSignal",
 		Category = "Logic",
 		DisplayName = "Emit Signal",
 		Description = "Emits a custom signal that other nodes can listen for.",
@@ -258,59 +274,8 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 		},
 		Properties = {
 			{ Key = "SignalId", Label = "Signal Name", Type = "String", Default = "", Tooltip = "Custom signal identifier." },
-			{ Key = "Duration", Label = "Duration", Type = "Number", Default = 0, Min = 0, Max = 10, Tooltip = "How long signal stays active. 0 = forever." },
+			{ Key = "Duration", Label = "Duration", Type = "Number", Default = 0, Min = 0, Max = 10, Tooltip = "How long signal stays active. 0 = instant pulse." },
 		},
-	},
-
-	AndGate = {
-		BlockType = "AndGate",
-		Category = "Logic",
-		DisplayName = "AND Gate",
-		Description = "Passes flow when threshold signals are active.",
-		Color = COLORS.Logic,
-		Ports = {
-			{ Name = "In", Direction = "Input", PortType = "Flow" },
-			{ Name = "Out", Direction = "Output", PortType = "Flow" },
-			{ Name = "Signal1", Direction = "Input", PortType = "Signal" },
-			{ Name = "Signal2", Direction = "Input", PortType = "Signal" },
-			{ Name = "Signal3", Direction = "Input", PortType = "Signal" },
-			{ Name = "OnPass", Direction = "Output", PortType = "Signal" },
-		},
-		Properties = {
-			{ Key = "Threshold", Label = "Threshold", Type = "Number", Default = 2, Min = 1, Max = 3, Tooltip = "Signals needed to pass." },
-		},
-	},
-
-	OrGate = {
-		BlockType = "OrGate",
-		Category = "Logic",
-		DisplayName = "OR Gate",
-		Description = "Passes flow when any input signal is active.",
-		Color = COLORS.Logic,
-		Ports = {
-			{ Name = "In", Direction = "Input", PortType = "Flow" },
-			{ Name = "Out", Direction = "Output", PortType = "Flow" },
-			{ Name = "Signal1", Direction = "Input", PortType = "Signal" },
-			{ Name = "Signal2", Direction = "Input", PortType = "Signal" },
-			{ Name = "Signal3", Direction = "Input", PortType = "Signal" },
-			{ Name = "OnPass", Direction = "Output", PortType = "Signal" },
-		},
-		Properties = {},
-	},
-
-	NotGate = {
-		BlockType = "NotGate",
-		Category = "Logic",
-		DisplayName = "NOT Gate",
-		Description = "Passes flow when input signal is NOT active.",
-		Color = COLORS.Logic,
-		Ports = {
-			{ Name = "In", Direction = "Input", PortType = "Flow" },
-			{ Name = "Out", Direction = "Output", PortType = "Flow" },
-			{ Name = "Signal", Direction = "Input", PortType = "Signal" },
-			{ Name = "OnPass", Direction = "Output", PortType = "Signal" },
-		},
-		Properties = {},
 	},
 
 	Timer = {
@@ -348,32 +313,120 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 		},
 	},
 
-	SubAction = {
-		BlockType = "SubAction",
-		Category = "Advanced",
-		DisplayName = "Sub-Action",
-		Description = "Executes another action. Blocks until complete.",
-		Color = COLORS.Advanced,
+	Self = {
+		BlockType = "Self",
+		Category = "Entity",
+		DisplayName = "Self",
+		Description = "Returns the entity executing this action.",
+		Color = COLORS.Entity,
+		Pure = true,
 		Ports = {
-			{ Name = "In", Direction = "Input", PortType = "Flow" },
-			{ Name = "Out", Direction = "Output", PortType = "Flow" },
-			{ Name = "OnComplete", Direction = "Output", PortType = "Signal" },
+			{ Name = "Entity", Direction = "Output", PortType = "Value", ValueType = "Entity" },
+		},
+		Properties = {},
+	},
+
+	LastHitTarget = {
+		BlockType = "LastHitTarget",
+		Category = "Entity",
+		DisplayName = "Last Hit Target",
+		Description = "Returns the most recently hit target.",
+		Color = COLORS.Entity,
+		Pure = true,
+		Ports = {
+			{ Name = "Entity", Direction = "Output", PortType = "Value", ValueType = "Entity" },
+			{ Name = "Valid", Direction = "Output", PortType = "Value", ValueType = "Boolean" },
+		},
+		Properties = {},
+	},
+
+	SelectTarget = {
+		BlockType = "SelectTarget",
+		Category = "Entity",
+		DisplayName = "Select Target",
+		Description = "Selects a single target from a list based on criteria.",
+		Color = COLORS.Entity,
+		Pure = true,
+		Ports = {
+			{ Name = "Targets", Direction = "Input", PortType = "Value", ValueType = "EntityList" },
+			{ Name = "Target", Direction = "Output", PortType = "Value", ValueType = "Entity" },
+			{ Name = "Found", Direction = "Output", PortType = "Value", ValueType = "Boolean" },
 		},
 		Properties = {
-			{ Key = "ActionId", Label = "Action ID", Type = "String", Default = "", Tooltip = "ID of action to execute." },
-			{ Key = "Speed", Label = "Speed", Type = "Number", Default = 1, Min = 0.1, Max = 3, Tooltip = "Speed multiplier." },
+			{ Key = "Criteria", Label = "Criteria", Type = "Dropdown", Default = "Nearest", Options = { "Nearest", "Farthest", "LowestHealth", "HighestHealth", "Random" }, Tooltip = "Selection criteria." },
 		},
 	},
 
-	Comment = {
-		BlockType = "Comment",
-		Category = "Utility",
-		DisplayName = "Comment",
-		Description = "A visual note for documentation. Does not execute.",
-		Color = COLORS.Utility,
-		Ports = {},
+	GetStat = {
+		BlockType = "GetStat",
+		Category = "Entity",
+		DisplayName = "Get Stat",
+		Description = "Gets a stat value from an entity.",
+		Color = COLORS.Entity,
+		Pure = true,
+		Ports = {
+			{ Name = "Target", Direction = "Input", PortType = "Value", ValueType = "Entity" },
+			{ Name = "Value", Direction = "Output", PortType = "Value", ValueType = "Number" },
+		},
 		Properties = {
-			{ Key = "Text", Label = "Text", Type = "String", Default = "Note", Tooltip = "Comment text." },
+			{ Key = "TargetMode", Label = "Target", Type = "Dropdown", Default = "Self", Options = { "Self", "LastHit", "Input" }, Tooltip = "Target entity." },
+			{ Key = "Stat", Label = "Stat", Type = "String", Default = "Health", Tooltip = "Stat name to get." },
+		},
+	},
+
+	SetStat = {
+		BlockType = "SetStat",
+		Category = "Entity",
+		DisplayName = "Set Stat",
+		Description = "Sets a stat value on an entity.",
+		Color = COLORS.Entity,
+		Ports = {
+			{ Name = "In", Direction = "Input", PortType = "Flow" },
+			{ Name = "Out", Direction = "Output", PortType = "Flow" },
+			{ Name = "Target", Direction = "Input", PortType = "Value", ValueType = "Entity" },
+			{ Name = "Value", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "Value" },
+		},
+		Properties = {
+			{ Key = "TargetMode", Label = "Target", Type = "Dropdown", Default = "Self", Options = { "Self", "LastHit", "Input" }, Tooltip = "Target entity." },
+			{ Key = "Stat", Label = "Stat", Type = "String", Default = "Health", Tooltip = "Stat name to set." },
+			{ Key = "Mode", Label = "Mode", Type = "Dropdown", Default = "Set", Options = { "Set", "Add", "Multiply" }, Tooltip = "How to apply the value." },
+			{ Key = "Value", Label = "Value", Type = "Number", Default = 0, Min = -9999, Max = 9999, Tooltip = "Value to apply.", Wireable = true },
+		},
+	},
+
+	GetState = {
+		BlockType = "GetState",
+		Category = "Entity",
+		DisplayName = "Get State",
+		Description = "Gets whether a state is active on an entity.",
+		Color = COLORS.Entity,
+		Pure = true,
+		Ports = {
+			{ Name = "Target", Direction = "Input", PortType = "Value", ValueType = "Entity" },
+			{ Name = "Active", Direction = "Output", PortType = "Value", ValueType = "Boolean" },
+		},
+		Properties = {
+			{ Key = "TargetMode", Label = "Target", Type = "Dropdown", Default = "Self", Options = { "Self", "LastHit", "Input" }, Tooltip = "Target entity." },
+			{ Key = "State", Label = "State", Type = "String", Default = "Blocking", Tooltip = "State name to check." },
+		},
+	},
+
+	SetState = {
+		BlockType = "SetState",
+		Category = "Entity",
+		DisplayName = "Set State",
+		Description = "Sets a state on an entity.",
+		Color = COLORS.Entity,
+		Ports = {
+			{ Name = "In", Direction = "Input", PortType = "Flow" },
+			{ Name = "Out", Direction = "Output", PortType = "Flow" },
+			{ Name = "Target", Direction = "Input", PortType = "Value", ValueType = "Entity" },
+		},
+		Properties = {
+			{ Key = "TargetMode", Label = "Target", Type = "Dropdown", Default = "Self", Options = { "Self", "LastHit", "Input" }, Tooltip = "Target entity." },
+			{ Key = "State", Label = "State", Type = "String", Default = "Blocking", Tooltip = "State name to set." },
+			{ Key = "Active", Label = "Active", Type = "Boolean", Default = true, Tooltip = "State value." },
+			{ Key = "Duration", Label = "Duration", Type = "Number", Default = 0, Min = 0, Max = 60, Tooltip = "Auto-clear after seconds. 0 = permanent." },
 		},
 	},
 
@@ -414,15 +467,18 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 
 	GetDistance = {
 		BlockType = "GetDistance",
-		Category = "Value",
+		Category = "Entity",
 		DisplayName = "Get Distance",
-		Description = "Gets the distance to the last hit target.",
-		Color = COLORS.Value,
+		Description = "Gets the distance between two entities.",
+		Color = COLORS.Entity,
 		Pure = true,
 		Ports = {
 			{ Name = "Distance", Direction = "Output", PortType = "Value", ValueType = "Number" },
 		},
-		Properties = {},
+		Properties = {
+			{ Key = "From", Label = "From", Type = "Dropdown", Default = "Self", Options = { "Self", "LastHit" }, Tooltip = "First entity." },
+			{ Key = "To", Label = "To", Type = "Dropdown", Default = "LastHit", Options = { "Self", "LastHit" }, Tooltip = "Second entity." },
+		},
 	},
 
 	Compare = {
@@ -482,35 +538,6 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 		},
 	},
 
-	SignalToBool = {
-		BlockType = "SignalToBool",
-		Category = "Value",
-		DisplayName = "Signal to Bool",
-		Description = "Converts signal active state to boolean.",
-		Color = COLORS.Value,
-		Pure = true,
-		Ports = {
-			{ Name = "Signal", Direction = "Input", PortType = "Signal" },
-			{ Name = "Active", Direction = "Output", PortType = "Value", ValueType = "Boolean" },
-		},
-		Properties = {},
-	},
-
-	GetTag = {
-		BlockType = "GetTag",
-		Category = "Value",
-		DisplayName = "Get Tag",
-		Description = "Gets the value of a combat tag.",
-		Color = COLORS.Value,
-		Pure = true,
-		Ports = {
-			{ Name = "Value", Direction = "Output", PortType = "Value", ValueType = "Boolean" },
-		},
-		Properties = {
-			{ Key = "Tag", Label = "Tag", Type = "String", Default = "", Tooltip = "Tag name to check." },
-		},
-	},
-
 	Clamp = {
 		BlockType = "Clamp",
 		Category = "Value",
@@ -539,99 +566,15 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 		Color = COLORS.Value,
 		Pure = true,
 		Ports = {
-			{ Name = "From", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "From" },
-			{ Name = "To", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "To" },
+			{ Name = "A", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "A" },
+			{ Name = "B", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "B" },
 			{ Name = "Alpha", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "Alpha" },
 			{ Name = "Result", Direction = "Output", PortType = "Value", ValueType = "Number" },
 		},
 		Properties = {
-			{ Key = "From", Label = "From", Type = "Number", Default = 0, Min = -9999, Max = 9999, Tooltip = "Start value.", Wireable = true },
-			{ Key = "To", Label = "To", Type = "Number", Default = 1, Min = -9999, Max = 9999, Tooltip = "End value.", Wireable = true },
+			{ Key = "A", Label = "A", Type = "Number", Default = 0, Min = -9999, Max = 9999, Tooltip = "Start value.", Wireable = true },
+			{ Key = "B", Label = "B", Type = "Number", Default = 1, Min = -9999, Max = 9999, Tooltip = "End value.", Wireable = true },
 			{ Key = "Alpha", Label = "Alpha", Type = "Number", Default = 0.5, Min = 0, Max = 1, Tooltip = "Interpolation factor.", Wireable = true },
-		},
-	},
-
-	Abs = {
-		BlockType = "Abs",
-		Category = "Value",
-		DisplayName = "Absolute",
-		Description = "Returns the absolute value of a number.",
-		Color = COLORS.Value,
-		Pure = true,
-		Ports = {
-			{ Name = "Value", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "Value" },
-			{ Name = "Result", Direction = "Output", PortType = "Value", ValueType = "Number" },
-		},
-		Properties = {
-			{ Key = "Value", Label = "Value", Type = "Number", Default = 0, Min = -9999, Max = 9999, Tooltip = "Input value.", Wireable = true },
-		},
-	},
-
-	Negate = {
-		BlockType = "Negate",
-		Category = "Value",
-		DisplayName = "Negate",
-		Description = "Returns the negative of a number.",
-		Color = COLORS.Value,
-		Pure = true,
-		Ports = {
-			{ Name = "Value", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "Value" },
-			{ Name = "Result", Direction = "Output", PortType = "Value", ValueType = "Number" },
-		},
-		Properties = {
-			{ Key = "Value", Label = "Value", Type = "Number", Default = 0, Min = -9999, Max = 9999, Tooltip = "Input value.", Wireable = true },
-		},
-	},
-
-	BoolNot = {
-		BlockType = "BoolNot",
-		Category = "Value",
-		DisplayName = "NOT",
-		Description = "Returns the logical NOT of a boolean.",
-		Color = COLORS.Value,
-		Pure = true,
-		Ports = {
-			{ Name = "Value", Direction = "Input", PortType = "Value", ValueType = "Boolean", PropertyKey = "Value" },
-			{ Name = "Result", Direction = "Output", PortType = "Value", ValueType = "Boolean" },
-		},
-		Properties = {
-			{ Key = "Value", Label = "Value", Type = "Boolean", Default = false, Tooltip = "Input value.", Wireable = true },
-		},
-	},
-
-	BoolAnd = {
-		BlockType = "BoolAnd",
-		Category = "Value",
-		DisplayName = "AND",
-		Description = "Returns the logical AND of two booleans.",
-		Color = COLORS.Value,
-		Pure = true,
-		Ports = {
-			{ Name = "A", Direction = "Input", PortType = "Value", ValueType = "Boolean", PropertyKey = "A" },
-			{ Name = "B", Direction = "Input", PortType = "Value", ValueType = "Boolean", PropertyKey = "B" },
-			{ Name = "Result", Direction = "Output", PortType = "Value", ValueType = "Boolean" },
-		},
-		Properties = {
-			{ Key = "A", Label = "A", Type = "Boolean", Default = false, Tooltip = "First value.", Wireable = true },
-			{ Key = "B", Label = "B", Type = "Boolean", Default = false, Tooltip = "Second value.", Wireable = true },
-		},
-	},
-
-	BoolOr = {
-		BlockType = "BoolOr",
-		Category = "Value",
-		DisplayName = "OR",
-		Description = "Returns the logical OR of two booleans.",
-		Color = COLORS.Value,
-		Pure = true,
-		Ports = {
-			{ Name = "A", Direction = "Input", PortType = "Value", ValueType = "Boolean", PropertyKey = "A" },
-			{ Name = "B", Direction = "Input", PortType = "Value", ValueType = "Boolean", PropertyKey = "B" },
-			{ Name = "Result", Direction = "Output", PortType = "Value", ValueType = "Boolean" },
-		},
-		Properties = {
-			{ Key = "A", Label = "A", Type = "Boolean", Default = false, Tooltip = "First value.", Wireable = true },
-			{ Key = "B", Label = "B", Type = "Boolean", Default = false, Tooltip = "Second value.", Wireable = true },
 		},
 	},
 
@@ -639,19 +582,129 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 		BlockType = "Select",
 		Category = "Value",
 		DisplayName = "Select",
-		Description = "Outputs A if condition is true, otherwise B.",
+		Description = "Selects between two values based on a condition.",
 		Color = COLORS.Value,
 		Pure = true,
 		Ports = {
 			{ Name = "Condition", Direction = "Input", PortType = "Value", ValueType = "Boolean", PropertyKey = "Condition" },
-			{ Name = "A", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "A" },
-			{ Name = "B", Direction = "Input", PortType = "Value", ValueType = "Number", PropertyKey = "B" },
-			{ Name = "Result", Direction = "Output", PortType = "Value", ValueType = "Number" },
+			{ Name = "True", Direction = "Input", PortType = "Value", ValueType = "Any", PropertyKey = "TrueValue" },
+			{ Name = "False", Direction = "Input", PortType = "Value", ValueType = "Any", PropertyKey = "FalseValue" },
+			{ Name = "Result", Direction = "Output", PortType = "Value", ValueType = "Any" },
 		},
 		Properties = {
 			{ Key = "Condition", Label = "Condition", Type = "Boolean", Default = true, Tooltip = "Selection condition.", Wireable = true },
-			{ Key = "A", Label = "If True", Type = "Number", Default = 0, Min = -9999, Max = 9999, Tooltip = "Value when true.", Wireable = true },
-			{ Key = "B", Label = "If False", Type = "Number", Default = 0, Min = -9999, Max = 9999, Tooltip = "Value when false.", Wireable = true },
+			{ Key = "TrueValue", Label = "True Value", Type = "Number", Default = 1, Min = -9999, Max = 9999, Tooltip = "Value if true.", Wireable = true },
+			{ Key = "FalseValue", Label = "False Value", Type = "Number", Default = 0, Min = -9999, Max = 9999, Tooltip = "Value if false.", Wireable = true },
+		},
+	},
+
+	And = {
+		BlockType = "And",
+		Category = "Boolean",
+		DisplayName = "AND",
+		Description = "Returns true if both inputs are true.",
+		Color = COLORS.Boolean,
+		Pure = true,
+		Ports = {
+			{ Name = "A", Direction = "Input", PortType = "Value", ValueType = "Boolean", PropertyKey = "A" },
+			{ Name = "B", Direction = "Input", PortType = "Value", ValueType = "Boolean", PropertyKey = "B" },
+			{ Name = "Result", Direction = "Output", PortType = "Value", ValueType = "Boolean" },
+		},
+		Properties = {
+			{ Key = "A", Label = "A", Type = "Boolean", Default = false, Tooltip = "First boolean.", Wireable = true },
+			{ Key = "B", Label = "B", Type = "Boolean", Default = false, Tooltip = "Second boolean.", Wireable = true },
+		},
+	},
+
+	Or = {
+		BlockType = "Or",
+		Category = "Boolean",
+		DisplayName = "OR",
+		Description = "Returns true if either input is true.",
+		Color = COLORS.Boolean,
+		Pure = true,
+		Ports = {
+			{ Name = "A", Direction = "Input", PortType = "Value", ValueType = "Boolean", PropertyKey = "A" },
+			{ Name = "B", Direction = "Input", PortType = "Value", ValueType = "Boolean", PropertyKey = "B" },
+			{ Name = "Result", Direction = "Output", PortType = "Value", ValueType = "Boolean" },
+		},
+		Properties = {
+			{ Key = "A", Label = "A", Type = "Boolean", Default = false, Tooltip = "First boolean.", Wireable = true },
+			{ Key = "B", Label = "B", Type = "Boolean", Default = false, Tooltip = "Second boolean.", Wireable = true },
+		},
+	},
+
+	Not = {
+		BlockType = "Not",
+		Category = "Boolean",
+		DisplayName = "NOT",
+		Description = "Returns the opposite of the input.",
+		Color = COLORS.Boolean,
+		Pure = true,
+		Ports = {
+			{ Name = "Value", Direction = "Input", PortType = "Value", ValueType = "Boolean", PropertyKey = "Value" },
+			{ Name = "Result", Direction = "Output", PortType = "Value", ValueType = "Boolean" },
+		},
+		Properties = {
+			{ Key = "Value", Label = "Value", Type = "Boolean", Default = false, Tooltip = "Boolean to invert.", Wireable = true },
+		},
+	},
+
+	SignalActive = {
+		BlockType = "SignalActive",
+		Category = "Boolean",
+		DisplayName = "Signal Active",
+		Description = "Returns true if the signal is currently active.",
+		Color = COLORS.Boolean,
+		Pure = true,
+		Ports = {
+			{ Name = "Signal", Direction = "Input", PortType = "Signal" },
+			{ Name = "Active", Direction = "Output", PortType = "Value", ValueType = "Boolean" },
+		},
+		Properties = {},
+	},
+
+	GetTag = {
+		BlockType = "GetTag",
+		Category = "Boolean",
+		DisplayName = "Get Tag",
+		Description = "Gets the value of a combat tag.",
+		Color = COLORS.Boolean,
+		Pure = true,
+		Ports = {
+			{ Name = "Value", Direction = "Output", PortType = "Value", ValueType = "Boolean" },
+		},
+		Properties = {
+			{ Key = "Tag", Label = "Tag", Type = "String", Default = "", Tooltip = "Tag name to check." },
+		},
+	},
+
+	SubAction = {
+		BlockType = "SubAction",
+		Category = "Advanced",
+		DisplayName = "Sub-Action",
+		Description = "Executes another action. Blocks until complete.",
+		Color = COLORS.Advanced,
+		Ports = {
+			{ Name = "In", Direction = "Input", PortType = "Flow" },
+			{ Name = "Out", Direction = "Output", PortType = "Flow" },
+			{ Name = "OnComplete", Direction = "Output", PortType = "Signal" },
+		},
+		Properties = {
+			{ Key = "ActionId", Label = "Action ID", Type = "String", Default = "", Tooltip = "ID of action to execute." },
+			{ Key = "Speed", Label = "Speed", Type = "Number", Default = 1, Min = 0.1, Max = 3, Tooltip = "Speed multiplier." },
+		},
+	},
+
+	Comment = {
+		BlockType = "Comment",
+		Category = "Utility",
+		DisplayName = "Comment",
+		Description = "A visual note for documentation. Does not execute.",
+		Color = COLORS.Utility,
+		Ports = {},
+		Properties = {
+			{ Key = "Text", Label = "Text", Type = "String", Default = "Note", Tooltip = "Comment text." },
 		},
 	},
 
@@ -659,7 +712,7 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 		BlockType = "Print",
 		Category = "Utility",
 		DisplayName = "Print",
-		Description = "Watches a value and prints it when evaluated. Connect to any output to observe it.",
+		Description = "Watches a value and prints it when evaluated.",
 		Color = COLORS.Utility,
 		Pure = false,
 		Ports = {
@@ -672,12 +725,13 @@ local DEFINITIONS: { [string]: BlockDefinition } = {
 }
 
 local CATEGORIES = {
-	{ Name = "Flow", Types = { "BranchStart", "Wait", "Branch", "Gate", "Condition" } },
-	{ Name = "Combat", Types = { "Hitbox", "HitCancel", "AddHealth" } },
+	{ Name = "Flow", Types = { "BranchStart", "Wait", "Branch", "Gate", "Condition", "Cancel" } },
+	{ Name = "Combat", Types = { "Hitbox", "HitWindow", "ModifyHealth" } },
 	{ Name = "Effects", Types = { "Animation", "Sound", "Velocity" } },
-	{ Name = "Logic", Types = { "Signal", "AndGate", "OrGate", "NotGate", "Timer", "Counter" } },
-	{ Name = "Value", Types = { "Constant", "GetHealth", "GetDistance", "Compare", "Math", "Random", "Clamp", "Lerp", "Abs", "Negate", "Select" } },
-	{ Name = "Boolean", Types = { "BoolNot", "BoolAnd", "BoolOr", "SignalToBool", "GetTag" } },
+	{ Name = "Logic", Types = { "EmitSignal", "Timer", "Counter" } },
+	{ Name = "Entity", Types = { "Self", "LastHitTarget", "SelectTarget", "GetDistance", "GetStat", "SetStat", "GetState", "SetState" } },
+	{ Name = "Value", Types = { "Constant", "GetHealth", "Compare", "Math", "Random", "Clamp", "Lerp", "Select" } },
+	{ Name = "Boolean", Types = { "And", "Or", "Not", "SignalActive", "GetTag" } },
 	{ Name = "Advanced", Types = { "SubAction" } },
 	{ Name = "Utility", Types = { "Comment", "Print" } },
 }
@@ -837,6 +891,21 @@ end
 
 function BlockDefinitions.GetColors(): { [string]: Color3 }
 	return COLORS
+end
+
+function BlockDefinitions.GetPortDefinition(BlockType: string, PortName: string, Direction: PortDirection): PortDefinition?
+	local Definition = DEFINITIONS[BlockType]
+	if not Definition then
+		return nil
+	end
+
+	for _, Port in Definition.Ports do
+		if Port.Name == PortName and Port.Direction == Direction then
+			return Port
+		end
+	end
+
+	return nil
 end
 
 return BlockDefinitions

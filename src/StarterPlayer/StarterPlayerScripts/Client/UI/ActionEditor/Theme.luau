@@ -3,7 +3,7 @@
 local Theme = {}
 
 Theme.Colors = {
-	Overlay = Color3.fromRGB(0,0,0),
+	Overlay = Color3.fromRGB(0, 0, 0),
 
 	Background = Color3.fromRGB(30, 30, 35),
 	BackgroundDark = Color3.fromRGB(22, 22, 26),
@@ -37,13 +37,14 @@ Theme.Colors = {
 	NodeUtility = Color3.fromRGB(90, 90, 95),
 	NodeValue = Color3.fromRGB(80, 180, 140),
 	NodeBoolean = Color3.fromRGB(180, 100, 100),
+	NodeEntity = Color3.fromRGB(100, 160, 200),
 
 	NodeWait = Color3.fromRGB(120, 120, 140),
 	NodeAnimation = Color3.fromRGB(180, 120, 200),
 	NodeSound = Color3.fromRGB(200, 160, 80),
 	NodeVelocity = Color3.fromRGB(80, 160, 200),
 	NodeHitbox = Color3.fromRGB(200, 80, 80),
-	NodeHitCancel = Color3.fromRGB(200, 120, 80),
+	NodeHitWindow = Color3.fromRGB(200, 120, 80),
 	NodeAction = Color3.fromRGB(160, 80, 200),
 	NodeBranch = Color3.fromRGB(80, 200, 160),
 	NodeSignal = Color3.fromRGB(200, 200, 80),
@@ -51,12 +52,24 @@ Theme.Colors = {
 	NodeHealth = Color3.fromRGB(80, 200, 80),
 
 	PortFlow = Color3.fromRGB(200, 200, 200),
-	PortSignal = Color3.fromRGB(200, 200, 80),
-	PortValue = Color3.fromRGB(80, 200, 160),
+	PortSignal = Color3.fromRGB(220, 200, 80),
+	PortNumber = Color3.fromRGB(80, 200, 180),
+	PortBoolean = Color3.fromRGB(200, 100, 120),
+	PortString = Color3.fromRGB(160, 100, 200),
+	PortVector3 = Color3.fromRGB(100, 140, 220),
+	PortEntity = Color3.fromRGB(100, 180, 220),
+	PortEntityList = Color3.fromRGB(80, 160, 200),
+	PortAny = Color3.fromRGB(80, 200, 160),
 
 	WireFlow = Color3.fromRGB(180, 180, 180),
-	WireSignal = Color3.fromRGB(200, 200, 80),
-	WireValue = Color3.fromRGB(80, 200, 160),
+	WireSignal = Color3.fromRGB(200, 180, 60),
+	WireNumber = Color3.fromRGB(60, 180, 160),
+	WireBoolean = Color3.fromRGB(180, 80, 100),
+	WireString = Color3.fromRGB(140, 80, 180),
+	WireVector3 = Color3.fromRGB(80, 120, 200),
+	WireEntity = Color3.fromRGB(80, 160, 200),
+	WireEntityList = Color3.fromRGB(60, 140, 180),
+	WireAny = Color3.fromRGB(60, 180, 140),
 	WirePreview = Color3.fromRGB(100, 140, 200),
 
 	BranchHeader = Color3.fromRGB(50, 50, 60),
@@ -141,6 +154,36 @@ Theme.Assets = {
 	GridImage = "rbxassetid://12796647774",
 }
 
+local PORT_COLORS: { [string]: Color3 } = {
+	Flow = Theme.Colors.PortFlow,
+	Signal = Theme.Colors.PortSignal,
+}
+
+local VALUE_TYPE_PORT_COLORS: { [string]: Color3 } = {
+	Number = Theme.Colors.PortNumber,
+	Boolean = Theme.Colors.PortBoolean,
+	String = Theme.Colors.PortString,
+	Vector3 = Theme.Colors.PortVector3,
+	Entity = Theme.Colors.PortEntity,
+	EntityList = Theme.Colors.PortEntityList,
+	Any = Theme.Colors.PortAny,
+}
+
+local WIRE_COLORS: { [string]: Color3 } = {
+	Flow = Theme.Colors.WireFlow,
+	Signal = Theme.Colors.WireSignal,
+}
+
+local VALUE_TYPE_WIRE_COLORS: { [string]: Color3 } = {
+	Number = Theme.Colors.WireNumber,
+	Boolean = Theme.Colors.WireBoolean,
+	String = Theme.Colors.WireString,
+	Vector3 = Theme.Colors.WireVector3,
+	Entity = Theme.Colors.WireEntity,
+	EntityList = Theme.Colors.WireEntityList,
+	Any = Theme.Colors.WireAny,
+}
+
 function Theme.ApplyCorner(Target: GuiObject, Radius: UDim | number | nil)
 	local Corner = Instance.new("UICorner")
 	if type(Radius) == "number" then
@@ -191,25 +234,29 @@ function Theme.ApplyPadding(Target: GuiObject, Padding: UDim?)
 	return PaddingObj
 end
 
-function Theme.GetPortColor(PortType: string): Color3
-	if PortType == "Flow" then
-		return Theme.Colors.PortFlow
-	elseif PortType == "Signal" then
-		return Theme.Colors.PortSignal
-	elseif PortType == "Value" then
-		return Theme.Colors.PortValue
+function Theme.GetPortColor(PortType: string, ValueType: string?): Color3
+	local BaseColor = PORT_COLORS[PortType]
+	if BaseColor then
+		return BaseColor
 	end
+
+	if PortType == "Value" and ValueType then
+		return VALUE_TYPE_PORT_COLORS[ValueType] or VALUE_TYPE_PORT_COLORS.Any
+	end
+
 	return Theme.Colors.PortFlow
 end
 
-function Theme.GetWireColor(WireType: string): Color3
-	if WireType == "Flow" then
-		return Theme.Colors.WireFlow
-	elseif WireType == "Signal" then
-		return Theme.Colors.WireSignal
-	elseif WireType == "Value" then
-		return Theme.Colors.WireValue
+function Theme.GetWireColor(PortType: string, ValueType: string?): Color3
+	local BaseColor = WIRE_COLORS[PortType]
+	if BaseColor then
+		return BaseColor
 	end
+
+	if PortType == "Value" and ValueType then
+		return VALUE_TYPE_WIRE_COLORS[ValueType] or VALUE_TYPE_WIRE_COLORS.Any
+	end
+
 	return Theme.Colors.WireFlow
 end
 

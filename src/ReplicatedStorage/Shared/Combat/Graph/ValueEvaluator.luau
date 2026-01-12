@@ -1,5 +1,8 @@
 --!strict
 
+local RunService = game:GetService("RunService")
+local ServerScriptService = game:GetService("ServerScriptService")
+
 local ValueEvaluator = {}
 
 export type EvaluationContext = {
@@ -8,82 +11,173 @@ export type EvaluationContext = {
 	Tags: { [string]: boolean },
 	IsSignalActive: ((SignalId: string) -> boolean)?,
 	ResolveInput: (PropertyKey: string) -> any,
+	Targets: { Model }?,
 }
 
 export type EvaluationResult = { [string]: any }
 
+local IsServer = RunService:IsServer()
+
 local Evaluators: { [string]: (Context: EvaluationContext, Properties: { [string]: any }) -> EvaluationResult } = {}
+
+local function GetHumanoidRootPart(Character: Model): BasePart?
+	return Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+end
+
+local function GetHumanoid(Character: Model): Humanoid?
+	return Character:FindFirstChildOfClass("Humanoid")
+end
+
+local function GetEnsemble(): any?
+	if not IsServer then
+		return nil
+	end
+	local Server = ServerScriptService:FindFirstChild("Server")
+	if not Server then
+		return nil
+	end
+	local EnsembleModule = Server:FindFirstChild("Ensemble")
+	return EnsembleModule and require(EnsembleModule)
+end
+
+local function GetStatComponent(): any?
+	if not IsServer then
+		return nil
+	end
+	local Server = ServerScriptService:FindFirstChild("Server")
+	if not Server then
+		return nil
+	end
+	local Components = Server:FindFirstChild("Components")
+	if not Components then
+		return nil
+	end
+	local StatComp = Components:FindFirstChild("StatComponent")
+	return StatComp and require(StatComp)
+end
+
+local function GetStateComponent(): any?
+	if not IsServer then
+		return nil
+	end
+	local Server = ServerScriptService:FindFirstChild("Server")
+	if not Server then
+		return nil
+	end
+	local Components = Server:FindFirstChild("Components")
+	if not Components then
+		return nil
+	end
+	local StateComp = Components:FindFirstChild("StateComponent")
+	return StateComp and require(StateComp)
+end
+
+local function ResolveTargetCharacter(Context: EvaluationContext, TargetMode: string): Model?
+	if TargetMode == "Self" then
+		return Context.Entity and Context.Entity.Character
+	elseif TargetMode == "LastHit" then
+		return Context.LastHitTarget
+	end
+	return nil
+end
+
+local function ToNumber(Value: any): number
+	if type(Value) == "number" then
+		return Value
+	elseif type(Value) == "boolean" then
+		return if Value then 1 else 0
+	elseif type(Value) == "string" then
+		return tonumber(Value) or 0
+	end
+	return 0
+end
+
+local function ToBoolean(Value: any): boolean
+	if type(Value) == "boolean" then
+		return Value
+	elseif type(Value) == "number" then
+		return Value ~= 0
+	elseif type(Value) == "string" then
+		return Value ~= ""
+	end
+	return Value ~= nil
+end
+
+local function ResolveNumber(Context: EvaluationContext, Key: string, Properties: { [string]: any }, Default: number): number
+	local Value = Context.ResolveInput(Key)
+	if Value ~= nil then
+		return ToNumber(Value)
+	end
+	return ToNumber(Properties[Key] or Default)
+end
+
+local function ResolveBoolean(Context: EvaluationContext, Key: string, Properties: { [string]: any }, Default: boolean): boolean
+	local Value = Context.ResolveInput(Key)
+	if Value ~= nil then
+		return ToBoolean(Value)
+	end
+	local PropValue = Properties[Key]
+	if PropValue ~= nil then
+		return ToBoolean(PropValue)
+	end
+	return Default
+end
 
 Evaluators.Constant = function(_Context: EvaluationContext, Properties: { [string]: any }): EvaluationResult
 	local ValueType = Properties.Type or "Number"
-	local Value: any
 
 	if ValueType == "Number" then
-		Value = Properties.NumberValue or 0
+		return { Value = Properties.NumberValue or 0 }
 	elseif ValueType == "Boolean" then
-		Value = Properties.BooleanValue or false
+		return { Value = Properties.BooleanValue or false }
 	elseif ValueType == "String" then
-		Value = Properties.StringValue or ""
+		return { Value = Properties.StringValue or "" }
 	end
 
-	return { Value = Value }
+	return { Value = Properties.NumberValue or 0 }
 end
 
 Evaluators.Compare = function(Context: EvaluationContext, Properties: { [string]: any }): EvaluationResult
-	local ValueA = Context.ResolveInput("A") or Properties.A or 0
-	local ValueB = Context.ResolveInput("B") or Properties.B or 0
+	local ValueA = ResolveNumber(Context, "A", Properties, 0)
+	local ValueB = ResolveNumber(Context, "B", Properties, 0)
 	local Operator = Properties.Operator or ">"
 
-	local Result = false
+	local Operations: { [string]: () -> boolean } = {
+		[">"] = function() return ValueA > ValueB end,
+		["<"] = function() return ValueA < ValueB end,
+		[">="] = function() return ValueA >= ValueB end,
+		["<="] = function() return ValueA <= ValueB end,
+		["=="] = function() return ValueA == ValueB end,
+		["!="] = function() return ValueA ~= ValueB end,
+	}
 
-	if Operator == ">" then
-		Result = ValueA > ValueB
-	elseif Operator == "<" then
-		Result = ValueA < ValueB
-	elseif Operator == ">=" then
-		Result = ValueA >= ValueB
-	elseif Operator == "<=" then
-		Result = ValueA <= ValueB
-	elseif Operator == "==" then
-		Result = ValueA == ValueB
-	elseif Operator == "!=" then
-		Result = ValueA ~= ValueB
-	end
-
-	return { Result = Result }
+	local Operation = Operations[Operator]
+	return { Result = Operation and Operation() or false }
 end
 
 Evaluators.Math = function(Context: EvaluationContext, Properties: { [string]: any }): EvaluationResult
-	local ValueA = Context.ResolveInput("A") or Properties.A or 0
-	local ValueB = Context.ResolveInput("B") or Properties.B or 0
+	local ValueA = ResolveNumber(Context, "A", Properties, 0)
+	local ValueB = ResolveNumber(Context, "B", Properties, 0)
 	local Operator = Properties.Operator or "+"
 
-	local Result = 0
+	local Operations: { [string]: () -> number } = {
+		["+"] = function() return ValueA + ValueB end,
+		["-"] = function() return ValueA - ValueB end,
+		["*"] = function() return ValueA * ValueB end,
+		["/"] = function() return if ValueB ~= 0 then ValueA / ValueB else 0 end,
+		["%"] = function() return if ValueB ~= 0 then ValueA % ValueB else 0 end,
+		["^"] = function() return ValueA ^ ValueB end,
+		["min"] = function() return math.min(ValueA, ValueB) end,
+		["max"] = function() return math.max(ValueA, ValueB) end,
+	}
 
-	if Operator == "+" then
-		Result = ValueA + ValueB
-	elseif Operator == "-" then
-		Result = ValueA - ValueB
-	elseif Operator == "*" then
-		Result = ValueA * ValueB
-	elseif Operator == "/" then
-		Result = if ValueB ~= 0 then ValueA / ValueB else 0
-	elseif Operator == "%" then
-		Result = if ValueB ~= 0 then ValueA % ValueB else 0
-	elseif Operator == "^" then
-		Result = ValueA ^ ValueB
-	elseif Operator == "min" then
-		Result = math.min(ValueA, ValueB)
-	elseif Operator == "max" then
-		Result = math.max(ValueA, ValueB)
-	end
-
-	return { Result = Result }
+	local Operation = Operations[Operator]
+	return { Result = Operation and Operation() or 0 }
 end
 
 Evaluators.Random = function(Context: EvaluationContext, Properties: { [string]: any }): EvaluationResult
-	local Min = Context.ResolveInput("Min") or Properties.Min or 0
-	local Max = Context.ResolveInput("Max") or Properties.Max or 1
+	local Min = ResolveNumber(Context, "Min", Properties, 0)
+	local Max = ResolveNumber(Context, "Max", Properties, 1)
 	local IsInteger = Properties.Integer or false
 
 	if Min > Max then
@@ -100,28 +194,78 @@ Evaluators.Random = function(Context: EvaluationContext, Properties: { [string]:
 	return { Result = Result }
 end
 
+Evaluators.Clamp = function(Context: EvaluationContext, Properties: { [string]: any }): EvaluationResult
+	local Value = ResolveNumber(Context, "Value", Properties, 0)
+	local Min = ResolveNumber(Context, "Min", Properties, 0)
+	local Max = ResolveNumber(Context, "Max", Properties, 1)
+
+	return { Result = math.clamp(Value, Min, Max) }
+end
+
+Evaluators.Lerp = function(Context: EvaluationContext, Properties: { [string]: any }): EvaluationResult
+	local A = ResolveNumber(Context, "A", Properties, 0)
+	local B = ResolveNumber(Context, "B", Properties, 1)
+	local Alpha = ResolveNumber(Context, "Alpha", Properties, 0.5)
+
+	return { Result = A + (B - A) * Alpha }
+end
+
+Evaluators.Select = function(Context: EvaluationContext, Properties: { [string]: any }): EvaluationResult
+	local Condition = ResolveBoolean(Context, "Condition", Properties, true)
+	local TrueValue = Context.ResolveInput("True") or Properties.TrueValue or 1
+	local FalseValue = Context.ResolveInput("False") or Properties.FalseValue or 0
+
+	return { Result = if Condition then TrueValue else FalseValue }
+end
+
+Evaluators.And = function(Context: EvaluationContext, Properties: { [string]: any }): EvaluationResult
+	local ValueA = ResolveBoolean(Context, "A", Properties, false)
+	local ValueB = ResolveBoolean(Context, "B", Properties, false)
+	return { Result = ValueA and ValueB }
+end
+
+Evaluators.Or = function(Context: EvaluationContext, Properties: { [string]: any }): EvaluationResult
+	local ValueA = ResolveBoolean(Context, "A", Properties, false)
+	local ValueB = ResolveBoolean(Context, "B", Properties, false)
+	return { Result = ValueA or ValueB }
+end
+
+Evaluators.Not = function(Context: EvaluationContext, Properties: { [string]: any }): EvaluationResult
+	local Value = ResolveBoolean(Context, "Value", Properties, false)
+	return { Result = not Value }
+end
+
+Evaluators.SignalActive = function(Context: EvaluationContext, _Properties: { [string]: any }): EvaluationResult
+	return { Active = Context.IsSignalActive ~= nil }
+end
+
+Evaluators.Self = function(Context: EvaluationContext, _Properties: { [string]: any }): EvaluationResult
+	return { Entity = Context.Entity }
+end
+
+Evaluators.LastHitTarget = function(Context: EvaluationContext, _Properties: { [string]: any }): EvaluationResult
+	return {
+		Entity = Context.LastHitTarget,
+		Valid = Context.LastHitTarget ~= nil,
+	}
+end
+
 Evaluators.GetHealth = function(Context: EvaluationContext, Properties: { [string]: any }): EvaluationResult
-	local Target = Properties.Target or "Self"
-	local Character: Model?
+	local TargetMode = Properties.Target or "Self"
+	local TargetCharacter = ResolveTargetCharacter(Context, TargetMode)
 
-	if Target == "Self" then
-		Character = Context.Entity and Context.Entity.Character
-	elseif Target == "LastHit" then
-		Character = Context.LastHitTarget
+	if not TargetCharacter then
+		return { Current = 0, Max = 0, Percent = 0 }
 	end
 
-	local Current = 0
-	local Max = 0
-	local Percent = 0
-
-	if Character then
-		local Humanoid = Character:FindFirstChildOfClass("Humanoid")
-		if Humanoid then
-			Current = Humanoid.Health
-			Max = Humanoid.MaxHealth
-			Percent = if Max > 0 then (Current / Max) * 100 else 0
-		end
+	local TargetHumanoid = GetHumanoid(TargetCharacter)
+	if not TargetHumanoid then
+		return { Current = 0, Max = 0, Percent = 0 }
 	end
+
+	local Current = TargetHumanoid.Health
+	local Max = TargetHumanoid.MaxHealth
+	local Percent = if Max > 0 then (Current / Max) * 100 else 0
 
 	return {
 		Current = Current,
@@ -130,143 +274,164 @@ Evaluators.GetHealth = function(Context: EvaluationContext, Properties: { [strin
 	}
 end
 
-Evaluators.GetDistance = function(Context: EvaluationContext, _Properties: { [string]: any }): EvaluationResult
-	local SelfCharacter = Context.Entity and Context.Entity.Character
-	local TargetCharacter = Context.LastHitTarget
+Evaluators.GetStat = function(Context: EvaluationContext, Properties: { [string]: any }): EvaluationResult
+	local TargetMode = Properties.TargetMode or "Self"
+	local StatName = Properties.Stat or "Health"
 
-	local Distance = math.huge
-
-	if SelfCharacter and TargetCharacter then
-		local SelfRoot = SelfCharacter:FindFirstChild("HumanoidRootPart") :: BasePart?
-		local TargetRoot = TargetCharacter:FindFirstChild("HumanoidRootPart") :: BasePart?
-
-		if SelfRoot and TargetRoot then
-			Distance = (SelfRoot.Position - TargetRoot.Position).Magnitude
-		end
+	local TargetCharacter = ResolveTargetCharacter(Context, TargetMode)
+	if not TargetCharacter then
+		return { Value = 0 }
 	end
 
-	return { Distance = Distance }
+	local Ensemble = GetEnsemble()
+	local StatComponent = GetStatComponent()
+	if not Ensemble or not StatComponent then
+		return { Value = 0 }
+	end
+
+	local Entity = Ensemble.GetEntity(TargetCharacter)
+	if not Entity then
+		return { Value = 0 }
+	end
+
+	local Stats = StatComponent.From(Entity)
+	if not Stats then
+		return { Value = 0 }
+	end
+
+	return { Value = Stats.GetStat(StatName) }
+end
+
+Evaluators.GetState = function(Context: EvaluationContext, Properties: { [string]: any }): EvaluationResult
+	local TargetMode = Properties.TargetMode or "Self"
+	local StateName = Properties.State or "Blocking"
+
+	local TargetCharacter = ResolveTargetCharacter(Context, TargetMode)
+	if not TargetCharacter then
+		return { Active = false }
+	end
+
+	local Ensemble = GetEnsemble()
+	local StateComponent = GetStateComponent()
+	if not Ensemble or not StateComponent then
+		return { Active = false }
+	end
+
+	local Entity = Ensemble.GetEntity(TargetCharacter)
+	if not Entity then
+		return { Active = false }
+	end
+
+	local States = StateComponent.From(Entity)
+	if not States then
+		return { Active = false }
+	end
+
+	return { Active = States.GetState(StateName) }
+end
+
+Evaluators.GetDistance = function(Context: EvaluationContext, Properties: { [string]: any }): EvaluationResult
+	local FromMode = Properties.From or "Self"
+	local ToMode = Properties.To or "LastHit"
+
+	local FromCharacter = ResolveTargetCharacter(Context, FromMode)
+	local ToCharacter = ResolveTargetCharacter(Context, ToMode)
+
+	if not FromCharacter or not ToCharacter then
+		return { Distance = math.huge }
+	end
+
+	local FromRoot = GetHumanoidRootPart(FromCharacter)
+	local ToRoot = GetHumanoidRootPart(ToCharacter)
+
+	if not FromRoot or not ToRoot then
+		return { Distance = math.huge }
+	end
+
+	return { Distance = (FromRoot.Position - ToRoot.Position).Magnitude }
 end
 
 Evaluators.GetTag = function(Context: EvaluationContext, Properties: { [string]: any }): EvaluationResult
 	local TagName = Properties.Tag or ""
-	local TagValue = false
-
-	if TagName ~= "" and Context.Tags then
-		TagValue = Context.Tags[TagName] == true
-	end
-
+	local TagValue = Context.Tags and Context.Tags[TagName] or false
 	return { Value = TagValue }
 end
 
-Evaluators.SignalToBool = function(Context: EvaluationContext, Properties: { [string]: any }): EvaluationResult
-	local Active = false
+Evaluators.SelectTarget = function(Context: EvaluationContext, Properties: { [string]: any }): EvaluationResult
+	local Targets = Context.Targets or {}
+	local Criteria = Properties.Criteria or "Nearest"
 
-	if Context.IsSignalActive then
-		local SignalId = Properties.SignalId
-		if SignalId and SignalId ~= "" then
-			Active = Context.IsSignalActive(SignalId)
+	if #Targets == 0 then
+		return { Target = nil, Found = false }
+	end
+
+	local SelfCharacter = Context.Entity and Context.Entity.Character
+	local SelfRoot = SelfCharacter and GetHumanoidRootPart(SelfCharacter)
+
+	local SelectedTarget: Model? = nil
+
+	local function SelectByDistance(SelectNearest: boolean): Model?
+		if not SelfRoot then
+			return nil
 		end
+
+		local BestDistance: number = if SelectNearest then math.huge else 0
+		local BestTarget: Model? = nil
+
+		for _, TargetModel: Model in ipairs(Targets) do
+			local TargetRoot: BasePart? = GetHumanoidRootPart(TargetModel)
+			if TargetRoot then
+				local Distance: number = (SelfRoot.Position - TargetRoot.Position).Magnitude
+				local IsBetter: boolean = if SelectNearest then (Distance < BestDistance) else (Distance > BestDistance)
+
+				if IsBetter then
+					BestDistance = Distance
+					BestTarget = TargetModel
+				end
+			end
+		end
+
+		return BestTarget
 	end
 
-	return { Active = Active }
-end
+	local function SelectByHealth(SelectLowest: boolean): Model?
+		local BestHealth: number = if SelectLowest then math.huge else 0
+		local BestTarget: Model? = nil
 
-Evaluators.Clamp = function(Context: EvaluationContext, Properties: { [string]: any }): EvaluationResult
-	local Value = Context.ResolveInput("Value") or Properties.Value or 0
-	local Min = Context.ResolveInput("Min") or Properties.Min or 0
-	local Max = Context.ResolveInput("Max") or Properties.Max or 1
+		for _, TargetModel: Model in ipairs(Targets) do
+			local TargetHumanoid: Humanoid? = GetHumanoid(TargetModel)
+			if TargetHumanoid then
+				local Health: number = TargetHumanoid.Health
+				local IsBetter: boolean = if SelectLowest then (Health < BestHealth) else (Health > BestHealth)
 
-	return { Result = math.clamp(Value, Min, Max) }
-end
+				if IsBetter then
+					BestHealth = Health
+					BestTarget = TargetModel
+				end
+			end
+		end
 
-Evaluators.Lerp = function(Context: EvaluationContext, Properties: { [string]: any }): EvaluationResult
-	local From = Context.ResolveInput("From") or Properties.From or 0
-	local To = Context.ResolveInput("To") or Properties.To or 1
-	local Alpha = Context.ResolveInput("Alpha") or Properties.Alpha or 0.5
-
-	local Result = From + (To - From) * Alpha
-	return { Result = Result }
-end
-
-Evaluators.Abs = function(Context: EvaluationContext, Properties: { [string]: any }): EvaluationResult
-	local Value = Context.ResolveInput("Value") or Properties.Value or 0
-	return { Result = math.abs(Value) }
-end
-
-Evaluators.Negate = function(Context: EvaluationContext, Properties: { [string]: any }): EvaluationResult
-	local Value = Context.ResolveInput("Value") or Properties.Value or 0
-	return { Result = -Value }
-end
-
-Evaluators.BoolNot = function(Context: EvaluationContext, Properties: { [string]: any }): EvaluationResult
-	local Value = Context.ResolveInput("Value")
-	if Value == nil then
-		Value = Properties.Value or false
-	end
-	return { Result = not Value }
-end
-
-Evaluators.BoolAnd = function(Context: EvaluationContext, Properties: { [string]: any }): EvaluationResult
-	local ValueA = Context.ResolveInput("A")
-	local ValueB = Context.ResolveInput("B")
-
-	if ValueA == nil then
-        ValueA = Properties.A or false
-    end
-	if ValueB == nil then
-        ValueB = Properties.B or false
-    end
-
-	return { Result = ValueA and ValueB }
-end
-
-Evaluators.BoolOr = function(Context: EvaluationContext, Properties: { [string]: any }): EvaluationResult
-	local ValueA = Context.ResolveInput("A")
-	local ValueB = Context.ResolveInput("B")
-
-	if ValueA == nil then
-        ValueA = Properties.A or false
-    end
-	if ValueB == nil then
-        ValueB = Properties.B or false
-    end
-
-	return { Result = ValueA or ValueB }
-end
-
-Evaluators.GetCounter = function(_Context: EvaluationContext, Properties: { [string]: any }): EvaluationResult
-	local _CounterId = Properties.CounterId or ""
-	local Count = 0
-
-	return { Count = Count }
-end
-
-Evaluators.GetElapsedTime = function(_Context: EvaluationContext, _Properties: { [string]: any }): EvaluationResult
-	return { Time = 0 }
-end
-
-Evaluators.Select = function(Context: EvaluationContext, Properties: { [string]: any }): EvaluationResult
-	local Condition = Context.ResolveInput("Condition")
-	if Condition == nil then
-		Condition = Properties.Condition
-	end
-	if Condition == nil then
-		Condition = true
+		return BestTarget
 	end
 
-	local ValueA = Context.ResolveInput("A")
-	if ValueA == nil then
-		ValueA = Properties.A or 0
+	if Criteria == "Random" then
+		SelectedTarget = Targets[math.random(1, #Targets)]
+	elseif Criteria == "Nearest" then
+		SelectedTarget = SelectByDistance(true)
+	elseif Criteria == "Farthest" then
+		SelectedTarget = SelectByDistance(false)
+	elseif Criteria == "LowestHealth" then
+		SelectedTarget = SelectByHealth(true)
+	elseif Criteria == "HighestHealth" then
+		SelectedTarget = SelectByHealth(false)
+	else
+		SelectedTarget = Targets[1]
 	end
 
-	local ValueB = Context.ResolveInput("B")
-	if ValueB == nil then
-		ValueB = Properties.B or 0
-	end
-
-	local Result = if Condition then ValueA else ValueB
-	return { Result = Result }
+	return {
+		Target = SelectedTarget,
+		Found = SelectedTarget ~= nil,
+	}
 end
 
 function ValueEvaluator.Evaluate(
@@ -303,6 +468,14 @@ function ValueEvaluator.GetAll(): { string }
 	end
 	table.sort(Types)
 	return Types
+end
+
+function ValueEvaluator.ToNumber(Value: any): number
+	return ToNumber(Value)
+end
+
+function ValueEvaluator.ToBoolean(Value: any): boolean
+	return ToBoolean(Value)
 end
 
 return ValueEvaluator
