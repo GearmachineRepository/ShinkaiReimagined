@@ -4,6 +4,7 @@ local UserInputService = game:GetService("UserInputService")
 local GuiService = game:GetService("GuiService")
 
 local Theme = require(script.Parent.Parent.Theme)
+local UILibrary = require(script.Parent.Parent.UILibrary)
 
 local Tooltip = {}
 
@@ -26,47 +27,47 @@ function Tooltip.Show(Text: string, Parent: GuiObject)
 	local GuiInset = GuiService:GetGuiInset()
 	MousePosition = MousePosition - GuiInset
 
-	local Container = Instance.new("Frame")
-	Container.Name = "Tooltip"
-	Container.BackgroundColor3 = Theme.Colors.Surface
-	Container.BorderSizePixel = 0
+	local Container = UILibrary.SurfaceContainer({
+		Name = "Tooltip",
+		Size = UDim2.fromOffset(0, 0),
+		ZIndex = Theme.ZIndex.Tooltip,
+		Parent = ScreenGui,
+	})
+
 	Container.AutomaticSize = Enum.AutomaticSize.XY
-	Container.ZIndex = Theme.ZIndex.Tooltip
-	Container.Parent = ScreenGui
 
-	Theme.ApplyCorner(Container, Theme.Sizes.BorderRadiusSmall)
-	Theme.ApplyStroke(Container, Theme.Colors.Border)
-
-	local Padding = Instance.new("UIPadding")
-	Padding.PaddingTop = UDim.new(0, 6)
-	Padding.PaddingBottom = UDim.new(0, 6)
-	Padding.PaddingLeft = UDim.new(0, 8)
-	Padding.PaddingRight = UDim.new(0, 8)
-	Padding.Parent = Container
+	UILibrary.Padding({
+		Top = UDim.new(0, 6),
+		Bottom = UDim.new(0, 6),
+		Left = UDim.new(0, 8),
+		Right = UDim.new(0, 8),
+		Parent = Container,
+	})
 
 	local SizeConstraint = Instance.new("UISizeConstraint")
 	SizeConstraint.MaxSize = Vector2.new(MAX_WIDTH, math.huge)
 	SizeConstraint.Parent = Container
 
-	local Label = Instance.new("TextLabel")
-	Label.Name = "Text"
-	Label.Size = UDim2.fromScale(0, 0)
+	local Label = UILibrary.BodyLabel({
+		Name = "Text",
+		Text = Text,
+		Size = UDim2.fromScale(0, 0),
+		ZIndex = Theme.ZIndex.Tooltip + 1,
+		Parent = Container,
+	})
+
 	Label.AutomaticSize = Enum.AutomaticSize.XY
-	Label.BackgroundTransparency = 1
-	Label.Text = Text
-	Label.TextColor3 = Theme.Colors.Text
-	Label.FontFace = Theme.Fonts.Default
 	Label.TextSize = Theme.TextSizes.Small
-	Label.TextWrapped = true
-	Label.TextXAlignment = Enum.TextXAlignment.Left
-	Label.ZIndex = Theme.ZIndex.Tooltip + 1
-	Label.Parent = Container
 
 	local ScreenSize = ScreenGui.AbsoluteSize
 	local PositionX = MousePosition.X + PADDING
 	local PositionY = MousePosition.Y + PADDING
 
 	task.defer(function()
+		if not Container or not Container.Parent then
+			return
+		end
+
 		local TooltipSize = Container.AbsoluteSize
 
 		if PositionX + TooltipSize.X > ScreenSize.X - PADDING then
@@ -86,10 +87,7 @@ end
 
 function Tooltip.Hide()
 	if ShowThread then
-		local Status = coroutine.status(ShowThread)
-		if Status == "suspended" then
-			task.cancel(ShowThread)
-		end
+		pcall(task.cancel, ShowThread)
 		ShowThread = nil
 	end
 
@@ -99,38 +97,34 @@ function Tooltip.Hide()
 	end
 end
 
-function Tooltip.ShowDelayed(Text: string, Parent: GuiObject)
-	Tooltip.Hide()
-
-	ShowThread = task.delay(SHOW_DELAY, function()
-		Tooltip.Show(Text, Parent)
-		ShowThread = nil
-	end)
-end
-
-function Tooltip.Bind(Element: GuiObject, Text: string)
+function Tooltip.Bind(Target: GuiObject, Text: string): () -> ()
 	local Connections: { RBXScriptConnection } = {}
 
-	table.insert(Connections, Element.MouseEnter:Connect(function()
-		Tooltip.ShowDelayed(Text, Element)
-	end))
-
-	table.insert(Connections, Element.MouseLeave:Connect(function()
-		Tooltip.Hide()
-	end))
-
-	table.insert(Connections, Element.Destroying:Connect(function()
-		Tooltip.Hide()
-		for _, Connection in Connections do
-			Connection:Disconnect()
+	table.insert(Connections, Target.MouseEnter:Connect(function()
+		if Text == "" then
+			return
 		end
+
+		ShowThread = task.delay(SHOW_DELAY, function()
+			Tooltip.Show(Text, Target)
+		end)
 	end))
+
+	table.insert(Connections, Target.MouseLeave:Connect(function()
+		Tooltip.Hide()
+	end))
+
+	if Target:IsA("GuiButton") then
+		table.insert(Connections, Target.MouseButton1Click:Connect(function()
+			Tooltip.Hide()
+		end))
+	end
 
 	return function()
-		Tooltip.Hide()
 		for _, Connection in Connections do
 			Connection:Disconnect()
 		end
+		table.clear(Connections)
 	end
 end
 

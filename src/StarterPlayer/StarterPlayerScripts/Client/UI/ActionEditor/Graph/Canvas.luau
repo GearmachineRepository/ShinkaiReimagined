@@ -14,7 +14,7 @@ export type CanvasConfig = {
 	Position: UDim2?,
 	AnchorPoint: Vector2?,
 	GridImage: string?,
-	Parent: GuiObject?,
+	Parent: Instance?,
 	OnOffsetChanged: ((Offset: Vector2) -> ())?,
 	OnZoomChanged: ((Zoom: number) -> ())?,
 	OnBackgroundClick: (() -> ())?,
@@ -224,10 +224,10 @@ function Canvas.Create(Config: CanvasConfig): CanvasInstance
 
 	UpdateContentTransform()
 
-	local CanvasObj = {
+	local CanvasObj: CanvasInstance = {
 		Frame = Container,
 		Content = Content,
-	}
+	} :: any
 
 	function CanvasObj.GetOffset(): Vector2
 		return Offset

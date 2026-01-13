@@ -1,6 +1,7 @@
 --!strict
 
 local Theme = require(script.Parent.Parent.Theme)
+local UILibrary = require(script.Parent.Parent.UILibrary)
 local Panel = require(script.Parent.Parent.Components.Panel)
 local Tooltip = require(script.Parent.Parent.Components.Tooltip)
 local NodeRegistry = require(script.Parent.Parent.Nodes.NodeRegistry)
@@ -8,7 +9,7 @@ local NodeRegistry = require(script.Parent.Parent.Nodes.NodeRegistry)
 local NodePalette = {}
 
 export type NodePaletteConfig = {
-	Parent: GuiObject?,
+	Parent: Instance?,
 	OnNodeSelected: ((BlockType: string) -> ())?,
 }
 
@@ -35,26 +36,27 @@ function NodePalette.Create(Config: NodePaletteConfig): NodePaletteInstance
 	})
 	Container.ZIndex = Theme.ZIndex.Panel
 
-	local Header = Instance.new("Frame")
-	Header.Name = "Header"
-	Header.Size = UDim2.new(1, 0, 0, 36)
+	local Header = UILibrary.SurfaceContainer({
+		Name = "Header",
+		Size = UDim2.new(1, 0, 0, 36),
+		ZIndex = Theme.ZIndex.Panel,
+		Parent = Container,
+	})
 	Header.BackgroundColor3 = Theme.Colors.BackgroundDark
-	Header.BorderSizePixel = 0
-	Header.ZIndex = Theme.ZIndex.Panel
-	Header.Parent = Container
 
-	local HeaderTitle = Instance.new("TextLabel")
-	HeaderTitle.Name = "Title"
-	HeaderTitle.Size = UDim2.new(1, -16, 1, 0)
-	HeaderTitle.Position = UDim2.fromOffset(8, 0)
-	HeaderTitle.BackgroundTransparency = 1
-	HeaderTitle.Text = "Nodes"
-	HeaderTitle.TextColor3 = Theme.Colors.Text
-	HeaderTitle.FontFace = Theme.Fonts.Bold
-	HeaderTitle.TextSize = Theme.TextSizes.Default
-	HeaderTitle.TextXAlignment = Enum.TextXAlignment.Left
-	HeaderTitle.ZIndex = Theme.ZIndex.Panel
-	HeaderTitle.Parent = Header
+	local Stroke = Header:FindFirstChildOfClass("UIStroke")
+	if Stroke then
+		Stroke:Destroy()
+	end
+
+	UILibrary.HeaderLabel({
+		Name = "Title",
+		Text = "Nodes",
+		Size = UDim2.new(1, -16, 1, 0),
+		Position = UDim2.fromOffset(8, 0),
+		ZIndex = Theme.ZIndex.Panel,
+		Parent = Header,
+	})
 
 	local ContentScroll = Panel.CreateScrollable({
 		Name = "Content",
@@ -66,7 +68,11 @@ function NodePalette.Create(Config: NodePaletteConfig): NodePaletteInstance
 	})
 	ContentScroll.ZIndex = Theme.ZIndex.Panel
 
-	Theme.ApplyListLayout(ContentScroll, Enum.FillDirection.Vertical, Theme.Sizes.GapSmall)
+	UILibrary.ListLayout({
+		Direction = Enum.FillDirection.Vertical,
+		Padding = Theme.Sizes.GapSmall,
+		Parent = ContentScroll,
+	})
 
 	local Connections: { RBXScriptConnection } = {}
 	local TooltipCleanups: { () -> () } = {}
@@ -77,32 +83,29 @@ function NodePalette.Create(Config: NodePaletteConfig): NodePaletteInstance
 	for _, Category in Categories do
 		CategoryOrder = CategoryOrder + 1
 
-		local CategoryFrame = Instance.new("Frame")
-		CategoryFrame.Name = "Category_" .. Category.Name
-		CategoryFrame.Size = UDim2.fromScale(1, 0)
+		local CategoryFrame = UILibrary.TransparentContainer({
+			Name = "Category_" .. Category.Name,
+			Size = UDim2.fromScale(1, 0),
+			LayoutOrder = CategoryOrder,
+			ZIndex = Theme.ZIndex.Panel,
+			Parent = ContentScroll,
+		})
 		CategoryFrame.AutomaticSize = Enum.AutomaticSize.Y
-		CategoryFrame.BackgroundTransparency = 1
-		CategoryFrame.LayoutOrder = CategoryOrder
-		CategoryFrame.ZIndex = Theme.ZIndex.Panel
-		CategoryFrame.Parent = ContentScroll
 
-		local CategoryLayout = Instance.new("UIListLayout")
-		CategoryLayout.FillDirection = Enum.FillDirection.Vertical
-		CategoryLayout.Padding = UDim.new(0, 2)
-		CategoryLayout.Parent = CategoryFrame
+		UILibrary.ListLayout({
+			Direction = Enum.FillDirection.Vertical,
+			Padding = UDim.new(0, 2),
+			Parent = CategoryFrame,
+		})
 
-		local CategoryLabel = Instance.new("TextLabel")
-		CategoryLabel.Name = "CategoryLabel"
-		CategoryLabel.Size = UDim2.new(1, 0, 0, 20)
-		CategoryLabel.BackgroundTransparency = 1
-		CategoryLabel.Text = Category.Name
-		CategoryLabel.TextColor3 = Theme.Colors.TextMuted
-		CategoryLabel.FontFace = Theme.Fonts.Bold
-		CategoryLabel.TextSize = Theme.TextSizes.Small
-		CategoryLabel.TextXAlignment = Enum.TextXAlignment.Left
+		local CategoryLabel = UILibrary.SectionLabel({
+			Name = "CategoryLabel",
+			Text = Category.Name,
+			Size = UDim2.new(1, 0, 0, 20),
+			ZIndex = Theme.ZIndex.Panel,
+			Parent = CategoryFrame,
+		})
 		CategoryLabel.LayoutOrder = 0
-		CategoryLabel.ZIndex = Theme.ZIndex.Panel
-		CategoryLabel.Parent = CategoryFrame
 
 		for TypeIndex, BlockType in Category.Types do
 			if BlockType == "BranchStart" then
@@ -120,42 +123,16 @@ function NodePalette.Create(Config: NodePaletteConfig): NodePaletteInstance
 				continue
 			end
 
-			local NodeButton = Instance.new("TextButton")
-			NodeButton.Name = "Node_" .. BlockType
-			NodeButton.Size = UDim2.new(1, 0, 0, 28)
-			NodeButton.BackgroundColor3 = Theme.Colors.Surface
-			NodeButton.BorderSizePixel = 0
-			NodeButton.AutoButtonColor = false
-			NodeButton.Text = ""
-			NodeButton.LayoutOrder = TypeIndex
-			NodeButton.ZIndex = Theme.ZIndex.Panel
-			NodeButton.Parent = CategoryFrame
-
-			Theme.ApplyCorner(NodeButton, Theme.Sizes.BorderRadiusSmall)
-
-			local ColorBar = Instance.new("Frame")
-			ColorBar.Name = "ColorBar"
-			ColorBar.Size = UDim2.new(0, 3, 1, -4)
-			ColorBar.Position = UDim2.fromOffset(2, 2)
-			ColorBar.BackgroundColor3 = Definition.Color
-			ColorBar.BorderSizePixel = 0
-			ColorBar.ZIndex = Theme.ZIndex.Panel + 1
-			ColorBar.Parent = NodeButton
-
-			Theme.ApplyCorner(ColorBar)
-
-			local NodeLabel = Instance.new("TextLabel")
-			NodeLabel.Name = "Label"
-			NodeLabel.Size = UDim2.new(1, -16, 1, 0)
-			NodeLabel.Position = UDim2.fromOffset(12, 0)
-			NodeLabel.BackgroundTransparency = 1
-			NodeLabel.Text = Definition.DisplayName
-			NodeLabel.TextColor3 = Theme.Colors.Text
-			NodeLabel.FontFace = Theme.Fonts.Default
-			NodeLabel.TextSize = Theme.TextSizes.Default
-			NodeLabel.TextXAlignment = Enum.TextXAlignment.Left
-			NodeLabel.ZIndex = Theme.ZIndex.Panel + 1
-			NodeLabel.Parent = NodeButton
+			local NodeButton = UILibrary.ListItemButton({
+				Name = "Node_" .. BlockType,
+				Text = Definition.DisplayName,
+				Size = UDim2.new(1, 0, 0, 28),
+				ShowColorBar = true,
+				BarColor = Definition.Color,
+				LayoutOrder = TypeIndex,
+				ZIndex = Theme.ZIndex.Panel,
+				Parent = CategoryFrame,
+			})
 
 			local Cleanup = Tooltip.Bind(NodeButton, Definition.Description or "")
 			table.insert(TooltipCleanups, Cleanup)

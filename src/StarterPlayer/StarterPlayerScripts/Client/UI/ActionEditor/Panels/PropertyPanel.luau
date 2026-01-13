@@ -2,6 +2,7 @@
 
 local Theme = require(script.Parent.Parent.Theme)
 local Types = require(script.Parent.Parent.Types)
+local UILibrary = require(script.Parent.Parent.UILibrary)
 local Panel = require(script.Parent.Parent.Components.Panel)
 local Button = require(script.Parent.Parent.Components.Button)
 local TextInput = require(script.Parent.Parent.Components.TextInput)
@@ -15,7 +16,7 @@ local NodeRegistry = require(script.Parent.Parent.Nodes.NodeRegistry)
 local PropertyPanel = {}
 
 export type PropertyPanelConfig = {
-	Parent: GuiObject?,
+	Parent: Instance?,
 	OnPropertyChanged: ((NodeId: string, Key: string, Value: any) -> ())?,
 	OnNodeDelete: ((NodeId: string) -> ())?,
 	OnCommentPropertyChanged: ((CommentId: string, Key: string, Value: any) -> ())?,
@@ -49,26 +50,27 @@ function PropertyPanel.Create(Config: PropertyPanelConfig): PropertyPanelInstanc
 	})
 	Container.ZIndex = Theme.ZIndex.Panel
 
-	local Header = Instance.new("Frame")
-	Header.Name = "Header"
-	Header.Size = UDim2.new(1, 0, 0, 36)
+	local Header = UILibrary.SurfaceContainer({
+		Name = "Header",
+		Size = UDim2.new(1, 0, 0, 36),
+		ZIndex = Theme.ZIndex.Panel,
+		Parent = Container,
+	})
 	Header.BackgroundColor3 = Theme.Colors.BackgroundDark
-	Header.BorderSizePixel = 0
-	Header.ZIndex = Theme.ZIndex.Panel
-	Header.Parent = Container
 
-	local HeaderTitle = Instance.new("TextLabel")
-	HeaderTitle.Name = "Title"
-	HeaderTitle.Size = UDim2.new(1, -16, 1, 0)
-	HeaderTitle.Position = UDim2.fromOffset(8, 0)
-	HeaderTitle.BackgroundTransparency = 1
-	HeaderTitle.Text = "Properties"
-	HeaderTitle.TextColor3 = Theme.Colors.Text
-	HeaderTitle.FontFace = Theme.Fonts.Bold
-	HeaderTitle.TextSize = Theme.TextSizes.Default
-	HeaderTitle.TextXAlignment = Enum.TextXAlignment.Left
-	HeaderTitle.ZIndex = Theme.ZIndex.Panel
-	HeaderTitle.Parent = Header
+	local Stroke = Header:FindFirstChildOfClass("UIStroke")
+	if Stroke then
+		Stroke:Destroy()
+	end
+
+	UILibrary.HeaderLabel({
+		Name = "Title",
+		Text = "Properties",
+		Size = UDim2.new(1, -16, 1, 0),
+		Position = UDim2.fromOffset(8, 0),
+		ZIndex = Theme.ZIndex.Panel,
+		Parent = Header,
+	})
 
 	local ContentScroll = Panel.CreateScrollable({
 		Name = "Content",
@@ -80,18 +82,20 @@ function PropertyPanel.Create(Config: PropertyPanelConfig): PropertyPanelInstanc
 	})
 	ContentScroll.ZIndex = Theme.ZIndex.Panel
 
-	Theme.ApplyListLayout(ContentScroll, Enum.FillDirection.Vertical, Theme.Sizes.GapLarge)
+	UILibrary.ListLayout({
+		Direction = Enum.FillDirection.Vertical,
+		Padding = Theme.Sizes.GapLarge,
+		Parent = ContentScroll,
+	})
 
-	local EmptyLabel = Instance.new("TextLabel")
-	EmptyLabel.Name = "EmptyLabel"
-	EmptyLabel.Size = UDim2.new(1, 0, 0, 40)
-	EmptyLabel.BackgroundTransparency = 1
-	EmptyLabel.Text = "Select a node to edit"
+	local EmptyLabel = UILibrary.BodyLabel({
+		Name = "EmptyLabel",
+		Text = "Select a node to edit",
+		Size = UDim2.new(1, 0, 0, 40),
+		ZIndex = Theme.ZIndex.Panel,
+		Parent = ContentScroll,
+	})
 	EmptyLabel.TextColor3 = Theme.Colors.TextMuted
-	EmptyLabel.FontFace = Theme.Fonts.Default
-	EmptyLabel.TextSize = Theme.TextSizes.Default
-	EmptyLabel.ZIndex = Theme.ZIndex.Panel
-	EmptyLabel.Parent = ContentScroll
 
 	local function ClearProperties()
 		for _, Input in PropertyInputs do
@@ -108,39 +112,35 @@ function PropertyPanel.Create(Config: PropertyPanelConfig): PropertyPanelInstanc
 	local function CreatePropertyRow(PropertyDef: Types.PropertyDefinition, Value: any, LayoutOrder: number)
 		local RowHeight = Theme.Sizes.InputHeight + 24
 
-		local Row = Instance.new("Frame")
-		Row.Name = "Property_" .. PropertyDef.Key
-		Row.Size = UDim2.new(1, 0, 0, RowHeight)
-		Row.BackgroundTransparency = 1
-		Row.LayoutOrder = LayoutOrder
-		Row.ZIndex = Theme.ZIndex.Panel
-		Row.Parent = ContentScroll
+		local Row = UILibrary.TransparentContainer({
+			Name = "Property_" .. PropertyDef.Key,
+			Size = UDim2.new(1, 0, 0, RowHeight),
+			LayoutOrder = LayoutOrder,
+			ZIndex = Theme.ZIndex.Panel,
+			Parent = ContentScroll,
+		})
 
-		local Label = Instance.new("TextLabel")
-		Label.Name = "Label"
-		Label.Size = UDim2.new(1, 0, 0, 18)
-		Label.Position = UDim2.fromOffset(0, 0)
-		Label.BackgroundTransparency = 1
-		Label.Text = PropertyDef.Label
-		Label.TextColor3 = Theme.Colors.TextMuted
-		Label.FontFace = Theme.Fonts.Default
-		Label.TextSize = Theme.TextSizes.Small
-		Label.TextXAlignment = Enum.TextXAlignment.Left
-		Label.ZIndex = Theme.ZIndex.Panel
-		Label.Parent = Row
+		local Label = UILibrary.PropertyLabel({
+			Name = "Label",
+			Text = PropertyDef.Label,
+			Size = UDim2.new(1, 0, 0, 18),
+			Position = UDim2.fromOffset(0, 0),
+			ZIndex = Theme.ZIndex.Panel,
+			Parent = Row,
+		})
 
 		if PropertyDef.Tooltip then
 			Label.Active = true
 			Tooltip.Bind(Label, PropertyDef.Tooltip)
 		end
 
-		local InputContainer = Instance.new("Frame")
-		InputContainer.Name = "InputContainer"
-		InputContainer.Size = UDim2.new(1, 0, 0, Theme.Sizes.InputHeight)
-		InputContainer.Position = UDim2.fromOffset(0, 20)
-		InputContainer.BackgroundTransparency = 1
-		InputContainer.ZIndex = Theme.ZIndex.Panel
-		InputContainer.Parent = Row
+		local InputContainer = UILibrary.TransparentContainer({
+			Name = "InputContainer",
+			Size = UDim2.new(1, 0, 0, Theme.Sizes.InputHeight),
+			Position = UDim2.fromOffset(0, 20),
+			ZIndex = Theme.ZIndex.Panel,
+			Parent = Row,
+		})
 
 		local InputInstance: any = nil
 
@@ -233,37 +233,31 @@ function PropertyPanel.Create(Config: PropertyPanelConfig): PropertyPanelInstanc
 			return
 		end
 
-		local NodeTypeLabel = Instance.new("TextLabel")
-		NodeTypeLabel.Name = "NodeType"
-		NodeTypeLabel.Size = UDim2.new(1, 0, 0, 24)
-		NodeTypeLabel.BackgroundTransparency = 1
-		NodeTypeLabel.Text = Definition.DisplayName
+		local NodeTypeLabel = UILibrary.HeaderLabel({
+			Name = "NodeType",
+			Text = Definition.DisplayName,
+			Size = UDim2.new(1, 0, 0, 24),
+			ZIndex = Theme.ZIndex.Panel,
+			Parent = ContentScroll,
+		})
 		NodeTypeLabel.TextColor3 = Definition.Color
-		NodeTypeLabel.FontFace = Theme.Fonts.Bold
-		NodeTypeLabel.TextSize = Theme.TextSizes.Large
-		NodeTypeLabel.TextXAlignment = Enum.TextXAlignment.Left
 		NodeTypeLabel.LayoutOrder = 0
-		NodeTypeLabel.ZIndex = Theme.ZIndex.Panel
-		NodeTypeLabel.Parent = ContentScroll
 		table.insert(PropertyInputs, { Frame = NodeTypeLabel })
 
 		local PropertyStartIndex = 1
 
 		if Definition.Description then
-			local DescriptionLabel = Instance.new("TextLabel")
-			DescriptionLabel.Name = "Description"
-			DescriptionLabel.Size = UDim2.fromScale(1, 0)
+			local DescriptionLabel = UILibrary.BodyLabel({
+				Name = "Description",
+				Text = Definition.Description,
+				Size = UDim2.fromScale(1, 0),
+				ZIndex = Theme.ZIndex.Panel,
+				Parent = ContentScroll,
+			})
 			DescriptionLabel.AutomaticSize = Enum.AutomaticSize.Y
-			DescriptionLabel.BackgroundTransparency = 1
-			DescriptionLabel.Text = Definition.Description
 			DescriptionLabel.TextColor3 = Theme.Colors.TextMuted
-			DescriptionLabel.FontFace = Theme.Fonts.Default
 			DescriptionLabel.TextSize = Theme.TextSizes.Small
-			DescriptionLabel.TextWrapped = true
-			DescriptionLabel.TextXAlignment = Enum.TextXAlignment.Left
 			DescriptionLabel.LayoutOrder = 1
-			DescriptionLabel.ZIndex = Theme.ZIndex.Panel
-			DescriptionLabel.Parent = ContentScroll
 			table.insert(PropertyInputs, { Frame = DescriptionLabel })
 			PropertyStartIndex = 2
 		end
@@ -273,12 +267,11 @@ function PropertyPanel.Create(Config: PropertyPanelConfig): PropertyPanelInstanc
 			CreatePropertyRow(PropertyDef, Value, Index + PropertyStartIndex - 1)
 		end
 
-		local Spacer = Instance.new("Frame")
-		Spacer.Name = "Spacer"
-		Spacer.Size = UDim2.new(1, 0, 0, 8)
-		Spacer.BackgroundTransparency = 1
-		Spacer.LayoutOrder = #Definition.Properties + PropertyStartIndex
-		Spacer.Parent = ContentScroll
+		local Spacer = UILibrary.Spacer({
+			Height = 8,
+			LayoutOrder = #Definition.Properties + PropertyStartIndex,
+			Parent = ContentScroll,
+		})
 		table.insert(PropertyInputs, { Frame = Spacer })
 
 		if CurrentNode.BlockType ~= "BranchStart" then
@@ -310,47 +303,39 @@ function PropertyPanel.Create(Config: PropertyPanelConfig): PropertyPanelInstanc
 
 		EmptyLabel.Visible = false
 
-		local CommentHeader = Instance.new("TextLabel")
-		CommentHeader.Name = "CommentHeader"
-		CommentHeader.Size = UDim2.new(1, 0, 0, 24)
-		CommentHeader.BackgroundTransparency = 1
-		CommentHeader.Text = "Comment"
-		CommentHeader.TextColor3 = Theme.Colors.Text
-		CommentHeader.FontFace = Theme.Fonts.Bold
-		CommentHeader.TextSize = Theme.TextSizes.Large
-		CommentHeader.TextXAlignment = Enum.TextXAlignment.Left
+		local CommentHeader = UILibrary.HeaderLabel({
+			Name = "CommentHeader",
+			Text = "Comment",
+			Size = UDim2.new(1, 0, 0, 24),
+			ZIndex = Theme.ZIndex.Panel,
+			Parent = ContentScroll,
+		})
 		CommentHeader.LayoutOrder = 0
-		CommentHeader.ZIndex = Theme.ZIndex.Panel
-		CommentHeader.Parent = ContentScroll
 		table.insert(PropertyInputs, { Frame = CommentHeader })
 
-		local TitleRow = Instance.new("Frame")
-		TitleRow.Name = "Property_Title"
-		TitleRow.Size = UDim2.new(1, 0, 0, Theme.Sizes.InputHeight + 24)
-		TitleRow.BackgroundTransparency = 1
-		TitleRow.LayoutOrder = 1
-		TitleRow.ZIndex = Theme.ZIndex.Panel
-		TitleRow.Parent = ContentScroll
+		local TitleRow = UILibrary.TransparentContainer({
+			Name = "Property_Title",
+			Size = UDim2.new(1, 0, 0, Theme.Sizes.InputHeight + 24),
+			LayoutOrder = 1,
+			ZIndex = Theme.ZIndex.Panel,
+			Parent = ContentScroll,
+		})
 
-		local TitleLabel = Instance.new("TextLabel")
-		TitleLabel.Name = "Label"
-		TitleLabel.Size = UDim2.new(1, 0, 0, 18)
-		TitleLabel.BackgroundTransparency = 1
-		TitleLabel.Text = "Title"
-		TitleLabel.TextColor3 = Theme.Colors.TextMuted
-		TitleLabel.FontFace = Theme.Fonts.Default
-		TitleLabel.TextSize = Theme.TextSizes.Small
-		TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
-		TitleLabel.ZIndex = Theme.ZIndex.Panel
-		TitleLabel.Parent = TitleRow
+		UILibrary.PropertyLabel({
+			Name = "Label",
+			Text = "Title",
+			Size = UDim2.new(1, 0, 0, 18),
+			ZIndex = Theme.ZIndex.Panel,
+			Parent = TitleRow,
+		})
 
-		local TitleContainer = Instance.new("Frame")
-		TitleContainer.Name = "InputContainer"
-		TitleContainer.Size = UDim2.new(1, 0, 0, Theme.Sizes.InputHeight)
-		TitleContainer.Position = UDim2.fromOffset(0, 20)
-		TitleContainer.BackgroundTransparency = 1
-		TitleContainer.ZIndex = Theme.ZIndex.Panel
-		TitleContainer.Parent = TitleRow
+		local TitleContainer = UILibrary.TransparentContainer({
+			Name = "InputContainer",
+			Size = UDim2.new(1, 0, 0, Theme.Sizes.InputHeight),
+			Position = UDim2.fromOffset(0, 20),
+			ZIndex = Theme.ZIndex.Panel,
+			Parent = TitleRow,
+		})
 
 		local TitleInput = TextInput.Create({
 			Text = CurrentComment.Title,
@@ -367,33 +352,29 @@ function PropertyPanel.Create(Config: PropertyPanelConfig): PropertyPanelInstanc
 		PropertyInputsByKey["Title"] = TitleInput
 		table.insert(PropertyInputs, { Frame = TitleRow })
 
-		local TextRow = Instance.new("Frame")
-		TextRow.Name = "Property_Text"
-		TextRow.Size = UDim2.new(1, 0, 0, 80 + 24)
-		TextRow.BackgroundTransparency = 1
-		TextRow.LayoutOrder = 2
-		TextRow.ZIndex = Theme.ZIndex.Panel
-		TextRow.Parent = ContentScroll
+		local TextRow = UILibrary.TransparentContainer({
+			Name = "Property_Text",
+			Size = UDim2.new(1, 0, 0, 80 + 24),
+			LayoutOrder = 2,
+			ZIndex = Theme.ZIndex.Panel,
+			Parent = ContentScroll,
+		})
 
-		local TextLabel = Instance.new("TextLabel")
-		TextLabel.Name = "Label"
-		TextLabel.Size = UDim2.new(1, 0, 0, 18)
-		TextLabel.BackgroundTransparency = 1
-		TextLabel.Text = "Body"
-		TextLabel.TextColor3 = Theme.Colors.TextMuted
-		TextLabel.FontFace = Theme.Fonts.Default
-		TextLabel.TextSize = Theme.TextSizes.Small
-		TextLabel.TextXAlignment = Enum.TextXAlignment.Left
-		TextLabel.ZIndex = Theme.ZIndex.Panel
-		TextLabel.Parent = TextRow
+		UILibrary.PropertyLabel({
+			Name = "Label",
+			Text = "Body",
+			Size = UDim2.new(1, 0, 0, 18),
+			ZIndex = Theme.ZIndex.Panel,
+			Parent = TextRow,
+		})
 
-		local TextContainer = Instance.new("Frame")
-		TextContainer.Name = "InputContainer"
-		TextContainer.Size = UDim2.new(1, 0, 0, 80)
-		TextContainer.Position = UDim2.fromOffset(0, 20)
-		TextContainer.BackgroundTransparency = 1
-		TextContainer.ZIndex = Theme.ZIndex.Panel
-		TextContainer.Parent = TextRow
+		local TextContainer = UILibrary.TransparentContainer({
+			Name = "InputContainer",
+			Size = UDim2.new(1, 0, 0, 80),
+			Position = UDim2.fromOffset(0, 20),
+			ZIndex = Theme.ZIndex.Panel,
+			Parent = TextRow,
+		})
 
 		local TextInputBox = Instance.new("TextBox")
 		TextInputBox.Name = "TextInput"
@@ -414,9 +395,12 @@ function PropertyPanel.Create(Config: PropertyPanelConfig): PropertyPanelInstanc
 		TextInputBox.ZIndex = Theme.ZIndex.Panel
 		TextInputBox.Parent = TextContainer
 
-		Theme.ApplyCorner(TextInputBox, Theme.Sizes.BorderRadiusSmall)
-		Theme.ApplyStroke(TextInputBox, Theme.Colors.Border)
-		Theme.ApplyPadding(TextInputBox, UDim.new(0, 8))
+		UILibrary.Corner(TextInputBox, Theme.Sizes.BorderRadiusSmall)
+		UILibrary.Stroke(TextInputBox, Theme.Colors.Border)
+		UILibrary.Padding({
+			All = UDim.new(0, 8),
+			Parent = TextInputBox,
+		})
 
 		TextInputBox.FocusLost:Connect(function()
 			if CurrentComment and Config.OnCommentPropertyChanged then
@@ -426,33 +410,29 @@ function PropertyPanel.Create(Config: PropertyPanelConfig): PropertyPanelInstanc
 
 		table.insert(PropertyInputs, { Frame = TextRow })
 
-		local ColorRow = Instance.new("Frame")
-		ColorRow.Name = "Property_Color"
-		ColorRow.Size = UDim2.new(1, 0, 0, Theme.Sizes.InputHeight + 24)
-		ColorRow.BackgroundTransparency = 1
-		ColorRow.LayoutOrder = 3
-		ColorRow.ZIndex = Theme.ZIndex.Panel
-		ColorRow.Parent = ContentScroll
+		local ColorRow = UILibrary.TransparentContainer({
+			Name = "Property_Color",
+			Size = UDim2.new(1, 0, 0, Theme.Sizes.InputHeight + 24),
+			LayoutOrder = 3,
+			ZIndex = Theme.ZIndex.Panel,
+			Parent = ContentScroll,
+		})
 
-		local ColorLabel = Instance.new("TextLabel")
-		ColorLabel.Name = "Label"
-		ColorLabel.Size = UDim2.new(1, 0, 0, 18)
-		ColorLabel.BackgroundTransparency = 1
-		ColorLabel.Text = "Color"
-		ColorLabel.TextColor3 = Theme.Colors.TextMuted
-		ColorLabel.FontFace = Theme.Fonts.Default
-		ColorLabel.TextSize = Theme.TextSizes.Small
-		ColorLabel.TextXAlignment = Enum.TextXAlignment.Left
-		ColorLabel.ZIndex = Theme.ZIndex.Panel
-		ColorLabel.Parent = ColorRow
+		UILibrary.PropertyLabel({
+			Name = "Label",
+			Text = "Color",
+			Size = UDim2.new(1, 0, 0, 18),
+			ZIndex = Theme.ZIndex.Panel,
+			Parent = ColorRow,
+		})
 
-		local ColorContainer = Instance.new("Frame")
-		ColorContainer.Name = "InputContainer"
-		ColorContainer.Size = UDim2.new(1, 0, 0, Theme.Sizes.InputHeight)
-		ColorContainer.Position = UDim2.fromOffset(0, 20)
-		ColorContainer.BackgroundTransparency = 1
-		ColorContainer.ZIndex = Theme.ZIndex.Panel
-		ColorContainer.Parent = ColorRow
+		local ColorContainer = UILibrary.TransparentContainer({
+			Name = "InputContainer",
+			Size = UDim2.new(1, 0, 0, Theme.Sizes.InputHeight),
+			Position = UDim2.fromOffset(0, 20),
+			ZIndex = Theme.ZIndex.Panel,
+			Parent = ColorRow,
+		})
 
 		local ColorInput = ColorPicker.Create({
 			Color = CurrentComment.Color,
@@ -468,12 +448,11 @@ function PropertyPanel.Create(Config: PropertyPanelConfig): PropertyPanelInstanc
 		PropertyInputsByKey["Color"] = ColorInput
 		table.insert(PropertyInputs, { Frame = ColorRow })
 
-		local Spacer = Instance.new("Frame")
-		Spacer.Name = "Spacer"
-		Spacer.Size = UDim2.new(1, 0, 0, 8)
-		Spacer.BackgroundTransparency = 1
-		Spacer.LayoutOrder = 4
-		Spacer.Parent = ContentScroll
+		local Spacer = UILibrary.Spacer({
+			Height = 8,
+			LayoutOrder = 4,
+			Parent = ContentScroll,
+		})
 		table.insert(PropertyInputs, { Frame = Spacer })
 
 		local DeleteButton = Button.Create({

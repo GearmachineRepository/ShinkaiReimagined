@@ -3,6 +3,7 @@
 local TweenService = game:GetService("TweenService")
 
 local Theme = require(script.Parent.Parent.Theme)
+local UILibrary = require(script.Parent.Parent.UILibrary)
 local Button = require(script.Parent.Button)
 
 local TemplatesModal = {}
@@ -14,7 +15,7 @@ export type TemplateEntry = {
 }
 
 export type TemplatesModalConfig = {
-	Parent: GuiObject,
+	Parent: Instance,
 	Templates: { TemplateEntry },
 	OnSelect: ((ActionId: string) -> ())?,
 	OnClose: (() -> ())?,
@@ -32,44 +33,26 @@ local SCALE_TWEEN = TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirecti
 function TemplatesModal.Create(Config: TemplatesModalConfig): TemplatesModalInstance
 	local Connections: { RBXScriptConnection } = {}
 
-	local Overlay = Instance.new("TextButton")
-	Overlay.Name = "TemplatesOverlay"
-	Overlay.Size = UDim2.fromScale(1, 1)
-	Overlay.BackgroundColor3 = Color3.new(0, 0, 0)
-	Overlay.BackgroundTransparency = 1
-	Overlay.BorderSizePixel = 0
-	Overlay.Text = ""
-	Overlay.AutoButtonColor = false
-	Overlay.ZIndex = Theme.ZIndex.Modal
-	Overlay.Parent = Config.Parent
+	local ModalParts = UILibrary.ModalContainer({
+		Size = UDim2.fromOffset(400, 450),
+		ZIndex = Theme.ZIndex.Modal,
+		Parent = Config.Parent,
+	})
 
-	local Dialog = Instance.new("Frame")
-	Dialog.Name = "Dialog"
-	Dialog.Size = UDim2.fromOffset(400, 450)
-	Dialog.Position = UDim2.fromScale(0.5, 0.5)
-	Dialog.AnchorPoint = Vector2.new(0.5, 0.5)
-	Dialog.BackgroundColor3 = Theme.Colors.Surface
-	Dialog.BorderSizePixel = 0
-	Dialog.ZIndex = Theme.ZIndex.Modal + 1
-	Dialog.Parent = Overlay
+	local Overlay = ModalParts.Overlay
+	local Dialog = ModalParts.Dialog
+	local DialogScale = ModalParts.Scale
 
-	Theme.ApplyCorner(Dialog, Theme.Sizes.BorderRadius)
-	Theme.ApplyStroke(Dialog, Theme.Colors.Border)
+	Dialog.AutomaticSize = Enum.AutomaticSize.None
 
-	local DialogScale = Instance.new("UIScale")
-	DialogScale.Scale = 0.9
-	DialogScale.Parent = Dialog
-
-	local TitleLabel = Instance.new("TextLabel")
-	TitleLabel.Name = "Title"
-	TitleLabel.Size = UDim2.new(1, 0, 0, 40)
-	TitleLabel.BackgroundTransparency = 1
-	TitleLabel.Text = "Action Templates"
-	TitleLabel.TextColor3 = Theme.Colors.Text
-	TitleLabel.FontFace = Theme.Fonts.Bold
-	TitleLabel.TextSize = Theme.TextSizes.Large
-	TitleLabel.ZIndex = Theme.ZIndex.Modal + 2
-	TitleLabel.Parent = Dialog
+	local TitleLabel = UILibrary.HeaderLabel({
+		Name = "Title",
+		Text = "Action Templates",
+		Size = UDim2.new(1, 0, 0, 40),
+		ZIndex = Theme.ZIndex.Modal + 2,
+		Parent = Dialog,
+	})
+	TitleLabel.TextXAlignment = Enum.TextXAlignment.Center
 
 	local ListContainer = Instance.new("ScrollingFrame")
 	ListContainer.Name = "List"
@@ -84,19 +67,19 @@ function TemplatesModal.Create(Config: TemplatesModalConfig): TemplatesModalInst
 	ListContainer.ZIndex = Theme.ZIndex.Modal + 2
 	ListContainer.Parent = Dialog
 
-	Theme.ApplyCorner(ListContainer, Theme.Sizes.BorderRadiusSmall)
+	UILibrary.Corner(ListContainer, Theme.Sizes.BorderRadiusSmall)
 
-	local ListLayout = Instance.new("UIListLayout")
-	ListLayout.FillDirection = Enum.FillDirection.Vertical
-	ListLayout.Padding = UDim.new(0, 4)
-	ListLayout.Parent = ListContainer
+	UILibrary.ListLayout({
+		Direction = Enum.FillDirection.Vertical,
+		Padding = UDim.new(0, 4),
+		Parent = ListContainer,
+	})
 
-	local ListPadding = Instance.new("UIPadding")
-	ListPadding.PaddingTop = UDim.new(0, 4)
-	ListPadding.PaddingBottom = UDim.new(0, 4)
-	ListPadding.PaddingLeft = UDim.new(0, 4)
-	ListPadding.PaddingRight = UDim.new(0, 4)
-	ListPadding.Parent = ListContainer
+	UILibrary.Padding({
+		All = UDim.new(0, 4),
+		ZIndex = Theme.ZIndex.Modal + 2,
+		Parent = Dialog,
+	})
 
 	local ModalInstance: TemplatesModalInstance = {
 		Frame = Overlay,
@@ -119,45 +102,35 @@ function TemplatesModal.Create(Config: TemplatesModalConfig): TemplatesModalInst
 	end
 
 	for Index, Template in Config.Templates do
-		local ItemButton = Instance.new("TextButton")
-		ItemButton.Name = Template.ActionId
-		ItemButton.Size = UDim2.new(1, 0, 0, 50)
-		ItemButton.BackgroundColor3 = Theme.Colors.Surface
-		ItemButton.BorderSizePixel = 0
-		ItemButton.Text = ""
-		ItemButton.AutoButtonColor = false
-		ItemButton.LayoutOrder = Index
-		ItemButton.ZIndex = Theme.ZIndex.Modal + 3
-		ItemButton.Parent = ListContainer
+		local ItemButton = UILibrary.ListItemButton({
+			Name = Template.ActionId,
+			Text = "",
+			Size = UDim2.new(1, 0, 0, 50),
+			LayoutOrder = Index,
+			ZIndex = Theme.ZIndex.Modal + 3,
+			Parent = ListContainer,
+		})
 
-		Theme.ApplyCorner(ItemButton, Theme.Sizes.BorderRadiusSmall)
+		UILibrary.HeaderLabel({
+			Name = "Name",
+			Text = Template.DisplayName,
+			Size = UDim2.new(1, -16, 0, 20),
+			Position = UDim2.fromOffset(8, 6),
+			ZIndex = Theme.ZIndex.Modal + 4,
+			Parent = ItemButton,
+		})
 
-		local NameLabel = Instance.new("TextLabel")
-		NameLabel.Name = "Name"
-		NameLabel.Size = UDim2.new(1, -16, 0, 20)
-		NameLabel.Position = UDim2.fromOffset(8, 6)
-		NameLabel.BackgroundTransparency = 1
-		NameLabel.Text = Template.DisplayName
-		NameLabel.TextColor3 = Theme.Colors.Text
-		NameLabel.FontFace = Theme.Fonts.Bold
-		NameLabel.TextSize = Theme.TextSizes.Default
-		NameLabel.TextXAlignment = Enum.TextXAlignment.Left
-		NameLabel.ZIndex = Theme.ZIndex.Modal + 4
-		NameLabel.Parent = ItemButton
-
-		local DescLabel = Instance.new("TextLabel")
-		DescLabel.Name = "Desc"
-		DescLabel.Size = UDim2.new(1, -16, 0, 16)
-		DescLabel.Position = UDim2.fromOffset(8, 26)
-		DescLabel.BackgroundTransparency = 1
-		DescLabel.Text = Template.Description or Template.ActionId
+		local DescLabel = UILibrary.BodyLabel({
+			Name = "Desc",
+			Text = Template.Description or Template.ActionId,
+			Size = UDim2.new(1, -16, 0, 16),
+			Position = UDim2.fromOffset(8, 26),
+			ZIndex = Theme.ZIndex.Modal + 4,
+			Parent = ItemButton,
+		})
 		DescLabel.TextColor3 = Theme.Colors.TextMuted
-		DescLabel.FontFace = Theme.Fonts.Default
 		DescLabel.TextSize = Theme.TextSizes.Small
-		DescLabel.TextXAlignment = Enum.TextXAlignment.Left
 		DescLabel.TextTruncate = Enum.TextTruncate.AtEnd
-		DescLabel.ZIndex = Theme.ZIndex.Modal + 4
-		DescLabel.Parent = ItemButton
 
 		table.insert(Connections, ItemButton.MouseEnter:Connect(function()
 			TweenService:Create(ItemButton, FADE_TWEEN, { BackgroundColor3 = Theme.Colors.SurfaceHover }):Play()

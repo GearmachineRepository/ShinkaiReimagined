@@ -3,6 +3,7 @@
 local TweenService = game:GetService("TweenService")
 
 local Theme = require(script.Parent.Parent.Theme)
+local UILibrary = require(script.Parent.Parent.UILibrary)
 
 local Notification = {}
 
@@ -15,7 +16,7 @@ export type NotificationConfig = {
 	Message: string,
 	Type: NotificationType?,
 	Duration: number?,
-	Parent: GuiObject,
+	Parent: Instance,
 }
 
 export type NotificationInstance = {
@@ -42,60 +43,55 @@ function Notification.Create(Config: NotificationConfig): NotificationInstance
 	local TypeColor = GetTypeColor(NotifType)
 	local IsDismissed = false
 
-	local Container = Instance.new("Frame")
-	Container.Name = "Notification"
-	Container.Size = UDim2.fromOffset(320, 0)
-	Container.Position = UDim2.new(0.5, 0, 0, -60)
+	local Container = UILibrary.SurfaceContainer({
+		Name = "Notification",
+		Size = UDim2.fromOffset(320, 0),
+		Position = UDim2.new(0.5, 0, 0, -60),
+		ZIndex = Theme.ZIndex.Tooltip,
+		Parent = Config.Parent,
+	})
 	Container.AnchorPoint = Vector2.new(0.5, 0)
-	Container.BackgroundColor3 = Theme.Colors.Surface
-	Container.BorderSizePixel = 0
 	Container.AutomaticSize = Enum.AutomaticSize.Y
-	Container.ZIndex = Theme.ZIndex.Tooltip
-	Container.Parent = Config.Parent
 
-	Theme.ApplyCorner(Container, Theme.Sizes.BorderRadius)
-	Theme.ApplyStroke(Container, TypeColor, 2)
+	local Stroke = Container:FindFirstChildOfClass("UIStroke")
+	if Stroke then
+		Stroke.Color = TypeColor
+		Stroke.Thickness = 2
+	end
 
-	local ContentPadding = Instance.new("UIPadding")
-	ContentPadding.PaddingTop = UDim.new(0, 12)
-	ContentPadding.PaddingBottom = UDim.new(0, 12)
-	ContentPadding.PaddingLeft = UDim.new(0, 12)
-	ContentPadding.PaddingRight = UDim.new(0, 12)
-	ContentPadding.Parent = Container
+	UILibrary.Padding({
+		All = UDim.new(0, 12),
+		Parent = Container,
+	})
 
-	local ContentLayout = Instance.new("UIListLayout")
-	ContentLayout.FillDirection = Enum.FillDirection.Horizontal
-	ContentLayout.Padding = UDim.new(0, 8)
-	ContentLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-	ContentLayout.Parent = Container
+	UILibrary.ListLayout({
+		Direction = Enum.FillDirection.Horizontal,
+		Padding = UDim.new(0, 8),
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		Parent = Container,
+	})
 
-	local Indicator = Instance.new("Frame")
-	Indicator.Name = "Indicator"
-	Indicator.Size = UDim2.fromOffset(4, 20)
+	local Indicator = UILibrary.TransparentContainer({
+		Name = "Indicator",
+		Size = UDim2.fromOffset(4, 20),
+		LayoutOrder = 1,
+		ZIndex = Theme.ZIndex.Tooltip,
+		Parent = Container,
+	})
+	Indicator.BackgroundTransparency = 0
 	Indicator.BackgroundColor3 = TypeColor
-	Indicator.BorderSizePixel = 0
-	Indicator.LayoutOrder = 1
-	Indicator.ZIndex = Theme.ZIndex.Tooltip
-	Indicator.Parent = Container
+	UILibrary.Corner(Indicator, UDim.new(0, 2))
 
-	Theme.ApplyCorner(Indicator, UDim.new(0, 2))
-
-	local MessageLabel = Instance.new("TextLabel")
-	MessageLabel.Name = "Message"
-	MessageLabel.Size = UDim2.new(1, -20, 0, 0)
-	MessageLabel.AutomaticSize = Enum.AutomaticSize.Y
-	MessageLabel.BackgroundTransparency = 1
-	MessageLabel.Text = Config.Message
-	MessageLabel.TextColor3 = Theme.Colors.Text
-	MessageLabel.FontFace = Theme.Fonts.Default
-	MessageLabel.TextSize = Theme.TextSizes.Default
-	MessageLabel.TextXAlignment = Enum.TextXAlignment.Left
-	MessageLabel.TextWrapped = true
+	local MessageLabel = UILibrary.BodyLabel({
+		Name = "Message",
+		Text = Config.Message,
+		Size = UDim2.new(1, -20, 0, 0),
+		ZIndex = Theme.ZIndex.Tooltip,
+		Parent = Container,
+	})
 	MessageLabel.LayoutOrder = 2
-	MessageLabel.ZIndex = Theme.ZIndex.Tooltip
-	MessageLabel.Parent = Container
 
-	local Instance: NotificationInstance = {
+	local NotifInstance: NotificationInstance = {
 		Frame = Container,
 	} :: any
 
@@ -110,15 +106,15 @@ function Notification.Create(Config: NotificationConfig): NotificationInstance
 		}):Play()
 
 		task.delay(0.25, function()
-			Instance.Destroy()
+			NotifInstance.Destroy()
 		end)
 	end
 
-	function Instance.Dismiss()
+	function NotifInstance.Dismiss()
 		SlideOut()
 	end
 
-	function Instance.Destroy()
+	function NotifInstance.Destroy()
 		Container:Destroy()
 	end
 
@@ -130,7 +126,7 @@ function Notification.Create(Config: NotificationConfig): NotificationInstance
 		SlideOut()
 	end)
 
-	return Instance
+	return NotifInstance
 end
 
 local CurrentNotification: NotificationInstance? = nil
@@ -143,7 +139,7 @@ function Notification.Show(Config: NotificationConfig)
 	CurrentNotification = Notification.Create(Config)
 end
 
-function Notification.Success(Message: string, Parent: GuiObject)
+function Notification.Success(Message: string, Parent: Instance)
 	Notification.Show({
 		Message = Message,
 		Type = "Success",
@@ -151,7 +147,7 @@ function Notification.Success(Message: string, Parent: GuiObject)
 	})
 end
 
-function Notification.Error(Message: string, Parent: GuiObject)
+function Notification.Error(Message: string, Parent: Instance)
 	Notification.Show({
 		Message = Message,
 		Type = "Error",
@@ -159,7 +155,7 @@ function Notification.Error(Message: string, Parent: GuiObject)
 	})
 end
 
-function Notification.Warning(Message: string, Parent: GuiObject)
+function Notification.Warning(Message: string, Parent: Instance)
 	Notification.Show({
 		Message = Message,
 		Type = "Warning",
@@ -167,7 +163,7 @@ function Notification.Warning(Message: string, Parent: GuiObject)
 	})
 end
 
-function Notification.Info(Message: string, Parent: GuiObject)
+function Notification.Info(Message: string, Parent: Instance)
 	Notification.Show({
 		Message = Message,
 		Type = "Info",

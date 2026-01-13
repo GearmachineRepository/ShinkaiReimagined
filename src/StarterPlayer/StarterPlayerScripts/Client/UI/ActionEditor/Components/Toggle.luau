@@ -3,6 +3,7 @@
 local TweenService = game:GetService("TweenService")
 
 local Theme = require(script.Parent.Parent.Theme)
+local UILibrary = require(script.Parent.Parent.UILibrary)
 
 local Toggle = {}
 
@@ -31,42 +32,41 @@ function Toggle.Create(Config: ToggleConfig): ToggleInstance
 	local CurrentValue = Config.Value or false
 	local BaseZIndex = Config.ZIndex or Theme.ZIndex.Panel
 
-	local Container = Instance.new("Frame")
-	Container.Name = Config.Name or "Toggle"
-	Container.Size = Config.Size or UDim2.fromOffset(40, 22)
-	Container.Position = Config.Position or UDim2.fromScale(0, 0)
-	Container.AnchorPoint = Config.AnchorPoint or Vector2.zero
+	local Container = UILibrary.SurfaceContainer({
+		Name = Config.Name or "Toggle",
+		Size = Config.Size or UDim2.fromOffset(40, 22),
+		Position = Config.Position,
+		LayoutOrder = Config.LayoutOrder or 0,
+		ZIndex = BaseZIndex,
+		Parent = Config.Parent,
+	})
+
 	Container.BackgroundColor3 = if CurrentValue then Theme.Colors.Primary else Theme.Colors.BackgroundDark
-	Container.BorderSizePixel = 0
-	Container.LayoutOrder = Config.LayoutOrder or 0
-	Container.ZIndex = BaseZIndex
 
-	Theme.ApplyCorner(Container, UDim.new(0.5, 0))
-	Theme.ApplyStroke(Container, Theme.Colors.Border)
-
-	local Knob = Instance.new("Frame")
-	Knob.Name = "Knob"
-	Knob.Size = UDim2.fromOffset(16, 16)
-	Knob.Position = if CurrentValue then UDim2.new(1, -19, 0.5, 0) else UDim2.new(0, 3, 0.5, 0)
-	Knob.AnchorPoint = Vector2.new(0, 0.5)
-	Knob.BackgroundColor3 = Theme.Colors.Text
-	Knob.BorderSizePixel = 0
-	Knob.ZIndex = BaseZIndex + 1
-	Knob.Parent = Container
-
-	Theme.ApplyCorner(Knob, UDim.new(0.5, 0))
-
-	local ClickDetector = Instance.new("TextButton")
-	ClickDetector.Name = "ClickDetector"
-	ClickDetector.Size = UDim2.fromScale(1, 1)
-	ClickDetector.BackgroundTransparency = 1
-	ClickDetector.Text = ""
-	ClickDetector.ZIndex = BaseZIndex + 2
-	ClickDetector.Parent = Container
-
-	if Config.Parent then
-		Container.Parent = Config.Parent
+	local Corner = Container:FindFirstChildOfClass("UICorner")
+	if Corner then
+		Corner.CornerRadius = UDim.new(0.5, 0)
 	end
+
+	local Knob = UILibrary.TransparentContainer({
+		Name = "Knob",
+		Size = UDim2.fromOffset(16, 16),
+		Position = if CurrentValue then UDim2.new(1, -19, 0.5, 0) else UDim2.new(0, 3, 0.5, 0),
+		ZIndex = BaseZIndex + 1,
+		Parent = Container,
+	})
+
+	Knob.AnchorPoint = Vector2.new(0, 0.5)
+	Knob.BackgroundTransparency = 0
+	Knob.BackgroundColor3 = Theme.Colors.Text
+
+	UILibrary.Corner(Knob, UDim.new(0.5, 0))
+
+	local ClickDetector = UILibrary.ClickBlocker({
+		Name = "ClickDetector",
+		ZIndex = BaseZIndex + 2,
+		Parent = Container,
+	})
 
 	local Connections: { RBXScriptConnection } = {}
 
@@ -86,29 +86,25 @@ function Toggle.Create(Config: ToggleConfig): ToggleInstance
 	table.insert(Connections, ClickDetector.MouseButton1Click:Connect(function()
 		CurrentValue = not CurrentValue
 		UpdateVisual(true)
-
 		if Config.OnChanged then
 			Config.OnChanged(CurrentValue)
 		end
 	end))
 
-	local Instance = {
+	local ToggleInstance: ToggleInstance = {
 		Frame = Container,
-	}
+	} :: any
 
-	function Instance.GetValue(): boolean
+	function ToggleInstance.GetValue(): boolean
 		return CurrentValue
 	end
 
-	function Instance.SetValue(Value: boolean)
-		if CurrentValue == Value then
-			return
-		end
+	function ToggleInstance.SetValue(Value: boolean)
 		CurrentValue = Value
 		UpdateVisual(false)
 	end
 
-	function Instance.Destroy()
+	function ToggleInstance.Destroy()
 		for _, Connection in Connections do
 			Connection:Disconnect()
 		end
@@ -116,7 +112,7 @@ function Toggle.Create(Config: ToggleConfig): ToggleInstance
 		Container:Destroy()
 	end
 
-	return Instance
+	return ToggleInstance
 end
 
 return Toggle

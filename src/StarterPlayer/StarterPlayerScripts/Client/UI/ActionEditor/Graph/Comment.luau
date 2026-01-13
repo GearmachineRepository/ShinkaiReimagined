@@ -3,6 +3,7 @@
 local UserInputService = game:GetService("UserInputService")
 
 local Theme = require(script.Parent.Parent.Theme)
+local UILibrary = require(script.Parent.Parent.UILibrary)
 
 local Comment = {}
 
@@ -20,7 +21,7 @@ export type CommentConfig = {
 	Color: Color3?,
 	Position: Vector2?,
 	Size: Vector2?,
-	Parent: GuiObject?,
+	Parent: Instance?,
 	OnSelected: ((CommentId: string) -> ())?,
 	OnMoved: ((CommentId: string, Position: Vector2) -> ())?,
 	OnResized: ((CommentId: string, Size: Vector2) -> ())?,
@@ -65,8 +66,8 @@ function Comment.Create(Config: CommentConfig): CommentInstance
 	Container.ZIndex = Theme.ZIndex.BranchContainer
 	Container.Active = true
 
-	Theme.ApplyCorner(Container, Theme.Sizes.BorderRadiusLarge)
-	local Stroke = Theme.ApplyStroke(Container, Color3.fromRGB(85, 85, 90))
+	UILibrary.Corner(Container, Theme.Sizes.BorderRadiusLarge)
+	local Stroke = UILibrary.Stroke(Container, Color3.fromRGB(85, 85, 90))
 	Stroke.Transparency = 0.2
 
 	local Header = Instance.new("Frame")
@@ -79,9 +80,7 @@ function Comment.Create(Config: CommentConfig): CommentInstance
 	Header.Active = false
 	Header.Parent = Container
 
-	local HeaderCorner = Instance.new("UICorner")
-	HeaderCorner.CornerRadius = Theme.Sizes.BorderRadiusLarge
-	HeaderCorner.Parent = Header
+	UILibrary.Corner(Header, Theme.Sizes.BorderRadiusLarge)
 
 	local HeaderMask = Instance.new("Frame")
 	HeaderMask.Name = "HeaderMask"
@@ -150,7 +149,7 @@ function Comment.Create(Config: CommentConfig): CommentInstance
 	ResizeHandle.Active = true
 	ResizeHandle.Parent = Container
 
-	Theme.ApplyCorner(ResizeHandle, UDim.new(0, 4))
+	UILibrary.Corner(ResizeHandle, UDim.new(0, 4))
 
 	if Config.Parent then
 		Container.Parent = Config.Parent

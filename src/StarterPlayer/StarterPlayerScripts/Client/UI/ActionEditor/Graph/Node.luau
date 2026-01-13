@@ -4,6 +4,7 @@ local UserInputService = game:GetService("UserInputService")
 
 local Theme = require(script.Parent.Parent.Theme)
 local Types = require(script.Parent.Parent.Types)
+local UILibrary = require(script.Parent.Parent.UILibrary)
 local NodeRow = require(script.Parent.NodeRow)
 
 local Node = {}
@@ -19,7 +20,7 @@ export type NodeConfig = {
 	Properties: { [string]: any }?,
 	PropertyDefinitions: { Types.PropertyDefinition }?,
 	WiredInputs: { [string]: boolean }?,
-	Parent: GuiObject?,
+	Parent: Instance?,
 	OnSelected: ((NodeId: string) -> ())?,
 	OnMoved: ((NodeId: string, Position: Vector2) -> ())?,
 	OnPortConnectionStart: ((NodeId: string, PortName: string, PortType: Types.PortType, Direction: Types.PortDirection, ValueType: string?) -> ())?,
@@ -105,8 +106,8 @@ function Node.Create(Config: NodeConfig): NodeInstance
 	Container.ZIndex = Theme.ZIndex.Node
 	Container.Active = true
 
-	Theme.ApplyCorner(Container, Theme.Sizes.BorderRadiusSmall)
-	local Stroke = Theme.ApplyStroke(Container, Theme.Colors.Border, Theme.StrokeSizes.Deslected)
+	UILibrary.Corner(Container, Theme.Sizes.BorderRadiusSmall)
+	local Stroke = UILibrary.Stroke(Container, Theme.Colors.Border, Theme.StrokeSizes.Deslected)
 
 	local Header = Instance.new("Frame")
 	Header.Name = "Header"
@@ -116,9 +117,7 @@ function Node.Create(Config: NodeConfig): NodeInstance
 	Header.ZIndex = Theme.ZIndex.NodeHeader
 	Header.Parent = Container
 
-	local HeaderCorner = Instance.new("UICorner")
-	HeaderCorner.CornerRadius = Theme.Sizes.BorderRadiusSmall
-	HeaderCorner.Parent = Header
+	UILibrary.Corner(Header, Theme.Sizes.BorderRadiusSmall)
 
 	local HeaderMask = Instance.new("Frame")
 	HeaderMask.Name = "Mask"
@@ -152,11 +151,12 @@ function Node.Create(Config: NodeConfig): NodeInstance
 	InputContainer.ClipsDescendants = false
 	InputContainer.Parent = Container
 
-	local InputLayout = Instance.new("UIListLayout")
-	InputLayout.FillDirection = Enum.FillDirection.Vertical
-	InputLayout.Padding = UDim.new(0, 0)
-	InputLayout.VerticalAlignment = Enum.VerticalAlignment.Top
-	InputLayout.Parent = InputContainer
+	UILibrary.ListLayout({
+		Direction = Enum.FillDirection.Vertical,
+		Padding = UDim.new(0, 0),
+		VerticalAlignment = Enum.VerticalAlignment.Top,
+		Parent = InputContainer,
+	})
 
 	local OutputContainer = Instance.new("Frame")
 	OutputContainer.Name = "Outputs"
@@ -167,12 +167,13 @@ function Node.Create(Config: NodeConfig): NodeInstance
 	OutputContainer.ClipsDescendants = false
 	OutputContainer.Parent = Container
 
-	local OutputLayout = Instance.new("UIListLayout")
-	OutputLayout.FillDirection = Enum.FillDirection.Vertical
-	OutputLayout.Padding = UDim.new(0, 0)
-	OutputLayout.VerticalAlignment = Enum.VerticalAlignment.Top
-	OutputLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-	OutputLayout.Parent = OutputContainer
+	UILibrary.ListLayout({
+		Direction = Enum.FillDirection.Vertical,
+		Padding = UDim.new(0, 0),
+		VerticalAlignment = Enum.VerticalAlignment.Top,
+		HorizontalAlignment = Enum.HorizontalAlignment.Right,
+		Parent = OutputContainer,
+	})
 
 	for Index, PortDef in Config.InputPorts do
 		local PropDef = PortPropertyMap[PortDef.Name]
@@ -247,11 +248,12 @@ function Node.Create(Config: NodeConfig): NodeInstance
 		NewPropertyContainer.Parent = Container
 		PropertyContainer = NewPropertyContainer
 
-		local PropLayout = Instance.new("UIListLayout")
-		PropLayout.FillDirection = Enum.FillDirection.Vertical
-		PropLayout.Padding = UDim.new(0, 0)
-		PropLayout.VerticalAlignment = Enum.VerticalAlignment.Top
-		PropLayout.Parent = PropertyContainer
+		UILibrary.ListLayout({
+			Direction = Enum.FillDirection.Vertical,
+			Padding = UDim.new(0, 0),
+			VerticalAlignment = Enum.VerticalAlignment.Top,
+			Parent = PropertyContainer,
+		})
 
 		for Index, PropDef in PropertiesWithoutPort do
 			local PropValue = nil
@@ -444,48 +446,43 @@ function Node.Create(Config: NodeConfig): NodeInstance
 
 	function NodeInstance.GetPort(PortName: string): PortAccessor?
 		local Row = PortToRow[PortName]
-		if Row and Row.GetWorldPosition then
-			local WorldPos = Row.GetWorldPosition()
-			if WorldPos then
-				return {
-					GetWorldPosition = function()
-						return Row.GetWorldPosition() :: Vector2
-					end,
-					NodeId = Config.NodeId,
-					PortName = PortName,
-					Direction = Row.Direction :: Types.PortDirection,
-					PortType = Row.PortType :: Types.PortType,
-					SetHighlighted = function(Highlighted: boolean)
-						Row.SetHighlighted(Highlighted)
-					end,
-				}
-			end
+		if not Row then
+			return nil
 		end
-		return nil
+
+		return {
+			GetWorldPosition = function(): Vector2
+				return Row.GetWorldPosition() or Vector2.zero
+			end,
+			NodeId = Config.NodeId,
+			PortName = PortName,
+			Direction = Row.Direction or "Input",
+			PortType = Row.PortType or "Flow",
+			SetHighlighted = function(Highlighted: boolean)
+				Row.SetHighlighted(Highlighted)
+			end,
+		}
 	end
 
 	function NodeInstance.GetAllPorts(): { [string]: PortAccessor }
-		local Result: { [string]: PortAccessor } = {}
+		local Ports: { [string]: PortAccessor } = {}
+
 		for PortName, Row in PortToRow do
-			if Row.GetWorldPosition then
-				local WorldPos = Row.GetWorldPosition()
-				if WorldPos then
-					Result[PortName] = {
-						GetWorldPosition = function()
-							return Row.GetWorldPosition() :: Vector2
-						end,
-						NodeId = Config.NodeId,
-						PortName = PortName,
-						Direction = Row.Direction :: Types.PortDirection,
-						PortType = Row.PortType :: Types.PortType,
-						SetHighlighted = function(Highlighted: boolean)
-							Row.SetHighlighted(Highlighted)
-						end,
-					}
-				end
-			end
+			Ports[PortName] = {
+				GetWorldPosition = function(): Vector2
+					return Row.GetWorldPosition() or Vector2.zero
+				end,
+				NodeId = Config.NodeId,
+				PortName = PortName,
+				Direction = Row.Direction or "Input",
+				PortType = Row.PortType or "Flow",
+				SetHighlighted = function(Highlighted: boolean)
+					Row.SetHighlighted(Highlighted)
+				end,
+			}
 		end
-		return Result
+
+		return Ports
 	end
 
 	function NodeInstance.SetPortWired(PortName: string, Wired: boolean)

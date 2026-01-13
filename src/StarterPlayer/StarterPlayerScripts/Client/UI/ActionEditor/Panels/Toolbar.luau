@@ -1,13 +1,14 @@
 --!strict
 
 local Theme = require(script.Parent.Parent.Theme)
+local UILibrary = require(script.Parent.Parent.UILibrary)
 local Button = require(script.Parent.Parent.Components.Button)
 local TextInput = require(script.Parent.Parent.Components.TextInput)
 
 local Toolbar = {}
 
 export type ToolbarConfig = {
-	Parent: GuiObject?,
+	Parent: Instance?,
 	OnSave: (() -> ())?,
 	OnLoad: (() -> ())?,
 	OnTest: (() -> ())?,
@@ -26,47 +27,52 @@ export type ToolbarInstance = {
 }
 
 function Toolbar.Create(Config: ToolbarConfig): ToolbarInstance
-	local Container = Instance.new("Frame")
-	Container.Name = "Toolbar"
-	Container.Size = UDim2.new(1, 0, 0, Theme.Sizes.ToolbarHeight)
-	Container.BackgroundColor3 = Theme.Colors.BackgroundDark
-	Container.BorderSizePixel = 0
+	local Container = UILibrary.ToolbarContainer({
+		Name = "Toolbar",
+		Size = UDim2.new(1, 0, 0, Theme.Sizes.ToolbarHeight),
+		ZIndex = Theme.ZIndex.Panel,
+		Parent = Config.Parent,
+	})
 
-	Theme.ApplyStroke(Container, Theme.Colors.Border)
+	local LeftSection = UILibrary.TransparentContainer({
+		Name = "Left",
+		Size = UDim2.fromScale(0.4, 1),
+		ZIndex = Theme.ZIndex.Panel,
+		Parent = Container,
+	})
 
-	local LeftSection = Instance.new("Frame")
-	LeftSection.Name = "Left"
-	LeftSection.Size = UDim2.fromScale(0.4, 1)
-	LeftSection.BackgroundTransparency = 1
-	LeftSection.Parent = Container
+	UILibrary.ListLayout({
+		Direction = Enum.FillDirection.Horizontal,
+		Padding = UDim.new(0, 8),
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		Parent = LeftSection,
+	})
 
-	local LeftLayout = Instance.new("UIListLayout")
-	LeftLayout.FillDirection = Enum.FillDirection.Horizontal
-	LeftLayout.Padding = UDim.new(0, 8)
-	LeftLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-	LeftLayout.Parent = LeftSection
+	UILibrary.Padding({
+		Left = UDim.new(0, 8),
+		Parent = LeftSection,
+	})
 
-	local LeftPadding = Instance.new("UIPadding")
-	LeftPadding.PaddingLeft = UDim.new(0, 8)
-	LeftPadding.Parent = LeftSection
+	local RightSection = UILibrary.TransparentContainer({
+		Name = "Right",
+		Size = UDim2.fromScale(0.6, 1),
+		Position = UDim2.fromScale(0.4, 0),
+		ZIndex = Theme.ZIndex.Panel,
+		Parent = Container,
+	})
 
-	local RightSection = Instance.new("Frame")
-	RightSection.Name = "Right"
-	RightSection.Size = UDim2.fromScale(0.6, 1)
-	RightSection.Position = UDim2.fromScale(0.4, 0)
-	RightSection.BackgroundTransparency = 1
-	RightSection.Parent = Container
+	UILibrary.ListLayout({
+		Direction = Enum.FillDirection.Horizontal,
+		Padding = UDim.new(0, 8),
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		HorizontalAlignment = Enum.HorizontalAlignment.Right,
+		Parent = RightSection,
+	})
 
-	local RightLayout = Instance.new("UIListLayout")
-	RightLayout.FillDirection = Enum.FillDirection.Horizontal
-	RightLayout.Padding = UDim.new(0, 8)
-	RightLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-	RightLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-	RightLayout.Parent = RightSection
-
-	local RightPadding = Instance.new("UIPadding")
-	RightPadding.PaddingRight = UDim.new(0, 8)
-	RightPadding.Parent = RightSection
+	UILibrary.Padding({
+		Right = UDim.new(0, 8),
+		Parent = RightSection,
+	})
 
 	local NameInput = TextInput.Create({
 		Name = "ActionName",
@@ -82,16 +88,15 @@ function Toolbar.Create(Config: ToolbarConfig): ToolbarInstance
 	})
 	NameInput.Frame.LayoutOrder = 1
 
-	local DirtyIndicator = Instance.new("TextLabel")
-	DirtyIndicator.Name = "DirtyIndicator"
-	DirtyIndicator.Size = UDim2.fromOffset(16, 28)
-	DirtyIndicator.BackgroundTransparency = 1
-	DirtyIndicator.Text = ""
+	local DirtyIndicator = UILibrary.HeaderLabel({
+		Name = "DirtyIndicator",
+		Text = "",
+		Size = UDim2.fromOffset(16, 28),
+		ZIndex = Theme.ZIndex.Panel,
+		Parent = LeftSection,
+	})
 	DirtyIndicator.TextColor3 = Theme.Colors.Warning
-	DirtyIndicator.FontFace = Theme.Fonts.Bold
-	DirtyIndicator.TextSize = Theme.TextSizes.Large
 	DirtyIndicator.LayoutOrder = 2
-	DirtyIndicator.Parent = LeftSection
 
 	local NewButton = Button.Create({
 		Name = "New",
@@ -152,10 +157,6 @@ function Toolbar.Create(Config: ToolbarConfig): ToolbarInstance
 		OnClick = Config.OnTemplates,
 	})
 	TemplatesButton.Frame.LayoutOrder = 7
-
-	if Config.Parent then
-		Container.Parent = Config.Parent
-	end
 
 	local ToolbarObj: ToolbarInstance = {
 		Frame = Container,

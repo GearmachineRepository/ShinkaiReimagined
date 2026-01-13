@@ -1,6 +1,7 @@
 --!strict
 
 local Theme = require(script.Parent.Parent.Theme)
+local UILibrary = require(script.Parent.Parent.UILibrary)
 
 local TextInput = {}
 
@@ -37,18 +38,18 @@ export type TextInputInstance = {
 function TextInput.Create(Config: TextInputConfig): TextInputInstance
 	local BaseZIndex = Config.ZIndex or Theme.ZIndex.Panel
 
-	local Container = Instance.new("Frame")
-	Container.Name = Config.Name or "TextInput"
-	Container.Size = Config.Size or UDim2.new(1, 0, 0, Theme.Sizes.InputHeight)
-	Container.Position = Config.Position or UDim2.fromScale(0, 0)
-	Container.AnchorPoint = Config.AnchorPoint or Vector2.zero
-	Container.BackgroundColor3 = Config.BackgroundColor or Theme.Colors.BackgroundDark
-	Container.BorderSizePixel = 0
-	Container.LayoutOrder = Config.LayoutOrder or 0
-	Container.ZIndex = BaseZIndex
+	local Container = UILibrary.SurfaceContainer({
+		Name = Config.Name or "TextInput",
+		Size = Config.Size or UDim2.new(1, 0, 0, Theme.Sizes.InputHeight),
+		Position = Config.Position,
+		LayoutOrder = Config.LayoutOrder or 0,
+		ZIndex = BaseZIndex,
+		Parent = Config.Parent,
+	})
 
-	Theme.ApplyCorner(Container, Theme.Sizes.BorderRadiusSmall)
-	local Stroke = Theme.ApplyStroke(Container, Theme.Colors.Border)
+	Container.BackgroundColor3 = Config.BackgroundColor or Theme.Colors.BackgroundDark
+
+	local Stroke = Container:FindFirstChildOfClass("UIStroke")
 
 	local Input = Instance.new("TextBox")
 	Input.Name = "Input"
@@ -66,18 +67,18 @@ function TextInput.Create(Config: TextInputConfig): TextInputInstance
 	Input.ZIndex = BaseZIndex + 1
 	Input.Parent = Container
 
-	if Config.Parent then
-		Container.Parent = Config.Parent
-	end
-
 	local Connections: { RBXScriptConnection } = {}
 
 	table.insert(Connections, Input.Focused:Connect(function()
-		Stroke.Color = Theme.Colors.BorderFocus
+		if Stroke then
+			Stroke.Color = Theme.Colors.BorderFocus
+		end
 	end))
 
 	table.insert(Connections, Input.FocusLost:Connect(function(EnterPressed: boolean)
-		Stroke.Color = Theme.Colors.Border
+		if Stroke then
+			Stroke.Color = Theme.Colors.Border
+		end
 		if Config.OnFocusLost then
 			Config.OnFocusLost(Input.Text, EnterPressed)
 		end
@@ -89,28 +90,28 @@ function TextInput.Create(Config: TextInputConfig): TextInputInstance
 		end
 	end))
 
-	local Instance = {
+	local InputInstance: TextInputInstance = {
 		Frame = Container,
 		TextBox = Input,
-	}
+	} :: any
 
-	function Instance.GetText(): string
+	function InputInstance.GetText(): string
 		return Input.Text
 	end
 
-	function Instance.SetText(Text: string)
+	function InputInstance.SetText(Text: string)
 		Input.Text = Text
 	end
 
-	function Instance.SetPlaceholder(Text: string)
+	function InputInstance.SetPlaceholder(Text: string)
 		Input.PlaceholderText = Text
 	end
 
-	function Instance.Focus()
+	function InputInstance.Focus()
 		Input:CaptureFocus()
 	end
 
-	function Instance.Destroy()
+	function InputInstance.Destroy()
 		for _, Connection in Connections do
 			Connection:Disconnect()
 		end
@@ -118,7 +119,7 @@ function TextInput.Create(Config: TextInputConfig): TextInputInstance
 		Container:Destroy()
 	end
 
-	return Instance
+	return InputInstance
 end
 
 return TextInput

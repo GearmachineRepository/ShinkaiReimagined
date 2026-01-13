@@ -2,6 +2,7 @@
 
 local Theme = require(script.Parent.Parent.Theme)
 local Types = require(script.Parent.Parent.Types)
+local UILibrary = require(script.Parent.Parent.UILibrary)
 local InlineControls = require(script.Parent.InlineControls)
 
 local NodeRow = {}
@@ -22,7 +23,7 @@ export type RowConfig = {
 	PropertyDef: Types.PropertyDefinition?,
 	PropertyValue: any?,
 	IsWired: boolean?,
-	Parent: GuiObject?,
+	Parent: Instance?,
 	ZIndex: number?,
 	OnConnectionStart: ((NodeId: string, PortName: string, PortType: Types.PortType, Direction: Types.PortDirection, ValueType: string?) -> ())?,
 	OnConnectionEnd: ((NodeId: string, PortName: string) -> ())?,
@@ -91,7 +92,7 @@ function NodeRow.Create(Config: RowConfig): RowInstance
 		NewPortCircle.Parent = Container
 		PortCircle = NewPortCircle
 
-		Theme.ApplyCorner(NewPortCircle, UDim.new(0.5, 0))
+		UILibrary.Corner(NewPortCircle, UDim.new(0.5, 0))
 
 		local InnerCircle = Instance.new("Frame")
 		InnerCircle.Name = "InnerCircle"
@@ -103,7 +104,7 @@ function NodeRow.Create(Config: RowConfig): RowInstance
 		InnerCircle.ZIndex = CurrentZIndex + 3
 		InnerCircle.Parent = PortCircle
 
-		Theme.ApplyCorner(InnerCircle, UDim.new(0.5, 0))
+		UILibrary.Corner(InnerCircle, UDim.new(0.5, 0))
 
 		local HalfRadius = PORT_RADIUS / 2
 		if Direction == "Input" then

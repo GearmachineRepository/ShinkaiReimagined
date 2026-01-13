@@ -2,12 +2,13 @@
 
 local Theme = require(script.Parent.Parent.Theme)
 local Types = require(script.Parent.Parent.Types)
+local UILibrary = require(script.Parent.Parent.UILibrary)
 local Panel = require(script.Parent.Parent.Components.Panel)
 
 local BranchList = {}
 
 export type BranchListConfig = {
-	Parent: GuiObject?,
+	Parent: Instance?,
 	OnBranchSelected: ((BranchId: string) -> ())?,
 	OnBranchCreated: ((BranchName: string) -> ())?,
 	OnBranchDeleted: ((BranchId: string) -> ())?,
@@ -38,43 +39,38 @@ function BranchList.Create(Config: BranchListConfig): BranchListInstance
 	})
 	Container.ZIndex = Theme.ZIndex.Panel
 
-	local Header = Instance.new("Frame")
-	Header.Name = "Header"
-	Header.Size = UDim2.new(1, 0, 0, 36)
+	local Header = UILibrary.SurfaceContainer({
+		Name = "Header",
+		Size = UDim2.new(1, 0, 0, 36),
+		ZIndex = Theme.ZIndex.Panel,
+		Parent = Container,
+	})
 	Header.BackgroundColor3 = Theme.Colors.BackgroundDark
-	Header.BorderSizePixel = 0
-	Header.ZIndex = Theme.ZIndex.Panel
-	Header.Parent = Container
 
-	local HeaderTitle = Instance.new("TextLabel")
-	HeaderTitle.Name = "Title"
-	HeaderTitle.Size = UDim2.new(1, -48, 1, 0)
-	HeaderTitle.Position = UDim2.fromOffset(8, 0)
-	HeaderTitle.BackgroundTransparency = 1
-	HeaderTitle.Text = "Branches"
-	HeaderTitle.TextColor3 = Theme.Colors.Text
-	HeaderTitle.FontFace = Theme.Fonts.Bold
-	HeaderTitle.TextSize = Theme.TextSizes.Default
-	HeaderTitle.TextXAlignment = Enum.TextXAlignment.Left
-	HeaderTitle.ZIndex = Theme.ZIndex.Panel
-	HeaderTitle.Parent = Header
+	local Stroke = Header:FindFirstChildOfClass("UIStroke")
+	if Stroke then
+		Stroke:Destroy()
+	end
 
-	local AddButton = Instance.new("TextButton")
-	AddButton.Name = "AddButton"
-	AddButton.Size = UDim2.fromOffset(28, 28)
-	AddButton.Position = UDim2.new(1, -32, 0.5, 0)
+	UILibrary.HeaderLabel({
+		Name = "Title",
+		Text = "Branches",
+		Size = UDim2.new(1, -48, 1, 0),
+		Position = UDim2.fromOffset(8, 0),
+		ZIndex = Theme.ZIndex.Panel,
+		Parent = Header,
+	})
+
+	local AddButton = UILibrary.IconButton({
+		Name = "AddButton",
+		Icon = "+",
+		Size = UDim2.fromOffset(28, 28),
+		Position = UDim2.new(1, -32, 0.5, 0),
+		ZIndex = Theme.ZIndex.Panel + 1,
+		Parent = Header,
+	})
 	AddButton.AnchorPoint = Vector2.new(0, 0.5)
 	AddButton.BackgroundColor3 = Theme.Colors.Success
-	AddButton.BorderSizePixel = 0
-	AddButton.Text = "+"
-	AddButton.TextColor3 = Theme.Colors.Text
-	AddButton.FontFace = Theme.Fonts.Bold
-	AddButton.TextSize = Theme.TextSizes.Large
-	AddButton.AutoButtonColor = false
-	AddButton.ZIndex = Theme.ZIndex.Panel + 1
-	AddButton.Parent = Header
-
-	Theme.ApplyCorner(AddButton, Theme.Sizes.BorderRadiusSmall)
 
 	AddButton.MouseEnter:Connect(function()
 		AddButton.BackgroundColor3 = Color3.fromRGB(100, 200, 140)
@@ -100,7 +96,11 @@ function BranchList.Create(Config: BranchListConfig): BranchListInstance
 	})
 	ContentScroll.ZIndex = Theme.ZIndex.Panel
 
-	Theme.ApplyListLayout(ContentScroll, Enum.FillDirection.Vertical, UDim.new(0, 2))
+	UILibrary.ListLayout({
+		Direction = Enum.FillDirection.Vertical,
+		Padding = UDim.new(0, 2),
+		Parent = ContentScroll,
+	})
 
 	local function ClearBranchButtons()
 		for _, ButtonData in BranchButtons do
@@ -119,45 +119,45 @@ function BranchList.Create(Config: BranchListConfig): BranchListInstance
 		for BranchId, BranchData in Branches do
 			LayoutOrder = LayoutOrder + 1
 
-			local BranchFrame = Instance.new("Frame")
-			BranchFrame.Name = "Branch_" .. BranchId
-			BranchFrame.Size = UDim2.new(1, 0, 0, 32)
+			local BranchFrame = UILibrary.SurfaceContainer({
+				Name = "Branch_" .. BranchId,
+				Size = UDim2.new(1, 0, 0, 32),
+				LayoutOrder = LayoutOrder,
+				ZIndex = Theme.ZIndex.Panel,
+				Parent = ContentScroll,
+			})
 			BranchFrame.BackgroundColor3 = if BranchId == SelectedBranchId
 				then Theme.Colors.SurfaceActive
 				else Theme.Colors.Surface
-			BranchFrame.BorderSizePixel = 0
-			BranchFrame.LayoutOrder = LayoutOrder
-			BranchFrame.ZIndex = Theme.ZIndex.Panel
-			BranchFrame.Parent = ContentScroll
 
-			Theme.ApplyCorner(BranchFrame, Theme.Sizes.BorderRadiusSmall)
+			local FrameStroke = BranchFrame:FindFirstChildOfClass("UIStroke")
+			if FrameStroke then
+				FrameStroke:Destroy()
+			end
 
-			local EntryIndicator = Instance.new("Frame")
-			EntryIndicator.Name = "EntryIndicator"
-			EntryIndicator.Size = UDim2.new(0, 4, 1, -4)
-			EntryIndicator.Position = UDim2.fromOffset(2, 2)
+			local EntryIndicator = UILibrary.TransparentContainer({
+				Name = "EntryIndicator",
+				Size = UDim2.new(0, 4, 1, -4),
+				Position = UDim2.fromOffset(2, 2),
+				ZIndex = Theme.ZIndex.Panel,
+				Parent = BranchFrame,
+			})
+			EntryIndicator.BackgroundTransparency = 0
 			EntryIndicator.BackgroundColor3 = if BranchData.IsEntry
 				then Theme.Colors.Success
 				else Theme.Colors.TextDisabled
-			EntryIndicator.BorderSizePixel = 0
-			EntryIndicator.ZIndex = Theme.ZIndex.Panel
-			EntryIndicator.Parent = BranchFrame
+			UILibrary.Corner(EntryIndicator, UDim.new(0, 2))
 
-			Theme.ApplyCorner(EntryIndicator, UDim.new(0, 2))
-
-			local BranchLabel = Instance.new("TextLabel")
-			BranchLabel.Name = "Label"
-			BranchLabel.Size = UDim2.new(1, -48, 1, 0)
-			BranchLabel.Position = UDim2.fromOffset(12, 0)
-			BranchLabel.BackgroundTransparency = 1
-			BranchLabel.Text = BranchData.BranchName
+			local BranchLabel = UILibrary.PropertyLabel({
+				Name = "Label",
+				Text = BranchData.BranchName,
+				Size = UDim2.new(1, -48, 1, 0),
+				Position = UDim2.fromOffset(12, 0),
+				ZIndex = Theme.ZIndex.Panel,
+				Parent = BranchFrame,
+			})
 			BranchLabel.TextColor3 = Theme.Colors.Text
-			BranchLabel.FontFace = Theme.Fonts.Default
-			BranchLabel.TextSize = Theme.TextSizes.Small
-			BranchLabel.TextXAlignment = Enum.TextXAlignment.Left
 			BranchLabel.TextTruncate = Enum.TextTruncate.AtEnd
-			BranchLabel.ZIndex = Theme.ZIndex.Panel
-			BranchLabel.Parent = BranchFrame
 
 			local RenameInput = Instance.new("TextBox")
 			RenameInput.Name = "RenameInput"
@@ -173,34 +173,26 @@ function BranchList.Create(Config: BranchListConfig): BranchListInstance
 			RenameInput.Visible = false
 			RenameInput.ZIndex = Theme.ZIndex.Panel + 1
 			RenameInput.Parent = BranchFrame
+			UILibrary.Corner(RenameInput, Theme.Sizes.BorderRadiusSmall)
 
-			Theme.ApplyCorner(RenameInput, Theme.Sizes.BorderRadiusSmall)
-
-			local DeleteButton = Instance.new("TextButton")
-			DeleteButton.Name = "Delete"
-			DeleteButton.Size = UDim2.fromOffset(20, 20)
-			DeleteButton.Position = UDim2.new(1, -24, 0.5, 0)
+			local DeleteButton = UILibrary.IconButton({
+				Name = "Delete",
+				Icon = "×",
+				Size = UDim2.fromOffset(20, 20),
+				Position = UDim2.new(1, -24, 0.5, 0),
+				ZIndex = Theme.ZIndex.Panel + 1,
+				Parent = BranchFrame,
+			})
 			DeleteButton.AnchorPoint = Vector2.new(0, 0.5)
 			DeleteButton.BackgroundColor3 = Theme.Colors.Error
-			DeleteButton.BorderSizePixel = 0
-			DeleteButton.Text = "×"
-			DeleteButton.TextColor3 = Theme.Colors.Text
-			DeleteButton.FontFace = Theme.Fonts.Bold
-			DeleteButton.TextSize = Theme.TextSizes.Default
-			DeleteButton.AutoButtonColor = false
-			DeleteButton.ZIndex = Theme.ZIndex.Panel + 1
-			DeleteButton.Parent = BranchFrame
 
-			Theme.ApplyCorner(DeleteButton, Theme.Sizes.BorderRadiusSmall)
-
-			local ClickDetector = Instance.new("TextButton")
-			ClickDetector.Name = "ClickDetector"
+			local ClickDetector = UILibrary.ClickBlocker({
+				Name = "ClickDetector",
+				ZIndex = Theme.ZIndex.Panel,
+				Parent = BranchFrame,
+			})
 			ClickDetector.Size = UDim2.new(1, -30, 1, 0)
 			ClickDetector.Position = UDim2.fromOffset(0, 0)
-			ClickDetector.BackgroundTransparency = 1
-			ClickDetector.Text = ""
-			ClickDetector.ZIndex = Theme.ZIndex.Panel
-			ClickDetector.Parent = BranchFrame
 
 			local Connections: { RBXScriptConnection } = {}
 			local LastClickTime = 0
@@ -268,16 +260,16 @@ function BranchList.Create(Config: BranchListConfig): BranchListInstance
 		end
 	end
 
-	local Instance: BranchListInstance = {
+	local BranchListInstance: BranchListInstance = {
 		Frame = Container,
 	} :: any
 
-	function Instance.SetBranches(NewBranches: { [string]: Types.BranchData })
+	function BranchListInstance.SetBranches(NewBranches: { [string]: Types.BranchData })
 		Branches = NewBranches
 		RebuildBranchList()
 	end
 
-	function Instance.SetSelectedBranch(BranchId: string?)
+	function BranchListInstance.SetSelectedBranch(BranchId: string?)
 		local OldSelected = SelectedBranchId
 		SelectedBranchId = BranchId
 
@@ -290,12 +282,12 @@ function BranchList.Create(Config: BranchListConfig): BranchListInstance
 		end
 	end
 
-	function Instance.Destroy()
+	function BranchListInstance.Destroy()
 		ClearBranchButtons()
 		Container:Destroy()
 	end
 
-	return Instance
+	return BranchListInstance
 end
 
 return BranchList

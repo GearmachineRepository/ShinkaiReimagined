@@ -3,6 +3,7 @@
 local UserInputService = game:GetService("UserInputService")
 
 local Theme = require(script.Parent.Parent.Theme)
+local UILibrary = require(script.Parent.Parent.UILibrary)
 
 local NumberInput = {}
 
@@ -38,18 +39,18 @@ function NumberInput.Create(Config: NumberInputConfig): NumberInputInstance
 	local Precision = Config.Precision or 2
 	local BaseZIndex = Config.ZIndex or Theme.ZIndex.Panel
 
-	local Container = Instance.new("Frame")
-	Container.Name = Config.Name or "NumberInput"
-	Container.Size = Config.Size or UDim2.new(1, 0, 0, Theme.Sizes.InputHeight)
-	Container.Position = Config.Position or UDim2.fromScale(0, 0)
-	Container.AnchorPoint = Config.AnchorPoint or Vector2.zero
-	Container.BackgroundColor3 = Theme.Colors.BackgroundDark
-	Container.BorderSizePixel = 0
-	Container.LayoutOrder = Config.LayoutOrder or 0
-	Container.ZIndex = BaseZIndex
+	local Container = UILibrary.SurfaceContainer({
+		Name = Config.Name or "NumberInput",
+		Size = Config.Size or UDim2.new(1, 0, 0, Theme.Sizes.InputHeight),
+		Position = Config.Position,
+		LayoutOrder = Config.LayoutOrder or 0,
+		ZIndex = BaseZIndex,
+		Parent = Config.Parent,
+	})
 
-	Theme.ApplyCorner(Container, Theme.Sizes.BorderRadiusSmall)
-	local Stroke = Theme.ApplyStroke(Container, Theme.Colors.Border)
+	Container.BackgroundColor3 = Theme.Colors.BackgroundDark
+
+	local Stroke = Container:FindFirstChildOfClass("UIStroke")
 
 	local Input = Instance.new("TextBox")
 	Input.Name = "Input"
@@ -64,10 +65,6 @@ function NumberInput.Create(Config: NumberInputConfig): NumberInputInstance
 	Input.ClearTextOnFocus = false
 	Input.ZIndex = BaseZIndex + 1
 	Input.Parent = Container
-
-	if Config.Parent then
-		Container.Parent = Config.Parent
-	end
 
 	local Connections: { RBXScriptConnection } = {}
 	local IsDragging = false
@@ -98,11 +95,15 @@ function NumberInput.Create(Config: NumberInputConfig): NumberInputInstance
 	end
 
 	table.insert(Connections, Input.Focused:Connect(function()
-		Stroke.Color = Theme.Colors.BorderFocus
+		if Stroke then
+			Stroke.Color = Theme.Colors.BorderFocus
+		end
 	end))
 
 	table.insert(Connections, Input.FocusLost:Connect(function()
-		Stroke.Color = Theme.Colors.Border
+		if Stroke then
+			Stroke.Color = Theme.Colors.Border
+		end
 		local ParsedValue = tonumber(Input.Text)
 		if ParsedValue then
 			SetValueInternal(ParsedValue, true)
@@ -144,25 +145,25 @@ function NumberInput.Create(Config: NumberInputConfig): NumberInputInstance
 		end
 	end))
 
-	local Instance = {
+	local NumberInputInstance: NumberInputInstance = {
 		Frame = Container,
-	}
+	} :: any
 
-	function Instance.GetValue(): number
+	function NumberInputInstance.GetValue(): number
 		return CurrentValue
 	end
 
-	function Instance.SetValue(Value: number)
+	function NumberInputInstance.SetValue(Value: number)
 		SetValueInternal(Value, false)
 	end
 
-	function Instance.SetRange(Min: number, Max: number)
+	function NumberInputInstance.SetRange(Min: number, Max: number)
 		MinValue = Min
 		MaxValue = Max
 		SetValueInternal(CurrentValue, false)
 	end
 
-	function Instance.Destroy()
+	function NumberInputInstance.Destroy()
 		for _, Connection in Connections do
 			Connection:Disconnect()
 		end
@@ -170,7 +171,7 @@ function NumberInput.Create(Config: NumberInputConfig): NumberInputInstance
 		Container:Destroy()
 	end
 
-	return Instance
+	return NumberInputInstance
 end
 
 return NumberInput

@@ -3,12 +3,13 @@
 local TweenService = game:GetService("TweenService")
 
 local Theme = require(script.Parent.Parent.Theme)
+local UILibrary = require(script.Parent.Parent.UILibrary)
 local Button = require(script.Parent.Button)
 
 local ExportJsonModal = {}
 
 export type ExportJsonModalConfig = {
-	Parent: GuiObject,
+	Parent: Instance,
 	JsonContent: string,
 	OnClose: (() -> ())?,
 }
@@ -25,105 +26,71 @@ local SCALE_TWEEN = TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirecti
 function ExportJsonModal.Create(Config: ExportJsonModalConfig): ExportJsonModalInstance
 	local Connections: { RBXScriptConnection } = {}
 
-	local Overlay = Instance.new("TextButton")
-	Overlay.Name = "ExportJsonOverlay"
-	Overlay.Size = UDim2.fromScale(1, 1)
-	Overlay.BackgroundColor3 = Color3.new(0, 0, 0)
-	Overlay.BackgroundTransparency = 1
-	Overlay.BorderSizePixel = 0
-	Overlay.Text = ""
-	Overlay.AutoButtonColor = false
-	Overlay.ZIndex = Theme.ZIndex.Modal
-	Overlay.Parent = Config.Parent
+	local ModalParts = UILibrary.ModalContainer({
+		Size = UDim2.fromOffset(600, 500),
+		ZIndex = Theme.ZIndex.Modal,
+		Parent = Config.Parent,
+	})
 
-	local Dialog = Instance.new("Frame")
-	Dialog.Name = "Dialog"
-	Dialog.Size = UDim2.fromOffset(600, 500)
-	Dialog.Position = UDim2.fromScale(0.5, 0.5)
-	Dialog.AnchorPoint = Vector2.new(0.5, 0.5)
-	Dialog.BackgroundColor3 = Theme.Colors.Surface
-	Dialog.BorderSizePixel = 0
-	Dialog.ZIndex = Theme.ZIndex.Modal + 1
-	Dialog.Parent = Overlay
+	local Overlay = ModalParts.Overlay
+	local Dialog = ModalParts.Dialog
+	local DialogScale = ModalParts.Scale
 
-	Theme.ApplyCorner(Dialog, Theme.Sizes.BorderRadius)
-	Theme.ApplyStroke(Dialog, Theme.Colors.Border)
+	Dialog.AutomaticSize = Enum.AutomaticSize.None
 
-	local DialogScale = Instance.new("UIScale")
-	DialogScale.Scale = 0.9
-	DialogScale.Parent = Dialog
+	UILibrary.Padding({
+		All = UDim.new(0, 16),
+		Parent = Dialog,
+	})
 
-	local DialogLayout = Instance.new("UIListLayout")
-	DialogLayout.FillDirection = Enum.FillDirection.Vertical
-	DialogLayout.Padding = UDim.new(0, 12)
-	DialogLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	DialogLayout.Parent = Dialog
+	UILibrary.ListLayout({
+		Direction = Enum.FillDirection.Vertical,
+		Padding = UDim.new(0, 12),
+		HorizontalAlignment = Enum.HorizontalAlignment.Center,
+		Parent = Dialog,
+	})
 
-	local DialogPadding = Instance.new("UIPadding")
-	DialogPadding.PaddingTop = UDim.new(0, 16)
-	DialogPadding.PaddingBottom = UDim.new(0, 16)
-	DialogPadding.PaddingLeft = UDim.new(0, 16)
-	DialogPadding.PaddingRight = UDim.new(0, 16)
-	DialogPadding.Parent = Dialog
-
-	local TitleLabel = Instance.new("TextLabel")
-	TitleLabel.Name = "Title"
-	TitleLabel.Size = UDim2.new(1, 0, 0, 24)
-	TitleLabel.BackgroundTransparency = 1
-	TitleLabel.Text = "Export JSON"
-	TitleLabel.TextColor3 = Theme.Colors.Text
-	TitleLabel.FontFace = Theme.Fonts.Bold
-	TitleLabel.TextSize = Theme.TextSizes.Large
+	local TitleLabel = UILibrary.HeaderLabel({
+		Name = "Title",
+		Text = "Export JSON",
+		Size = UDim2.new(1, 0, 0, 24),
+		ZIndex = Theme.ZIndex.Modal + 2,
+		Parent = Dialog,
+	})
 	TitleLabel.TextXAlignment = Enum.TextXAlignment.Center
 	TitleLabel.LayoutOrder = 1
-	TitleLabel.ZIndex = Theme.ZIndex.Modal + 2
-	TitleLabel.Parent = Dialog
 
-	local HintLabel = Instance.new("TextLabel")
-	HintLabel.Name = "Hint"
-	HintLabel.Size = UDim2.new(1, 0, 0, 20)
-	HintLabel.BackgroundTransparency = 1
-	HintLabel.Text = "Select all (Ctrl+A) and copy (Ctrl+C)"
+	local HintLabel = UILibrary.BodyLabel({
+		Name = "Hint",
+		Text = "Select all (Ctrl+A) and copy (Ctrl+C)",
+		Size = UDim2.new(1, 0, 0, 20),
+		ZIndex = Theme.ZIndex.Modal + 2,
+		Parent = Dialog,
+	})
 	HintLabel.TextColor3 = Theme.Colors.TextMuted
-	HintLabel.FontFace = Theme.Fonts.Default
 	HintLabel.TextSize = Theme.TextSizes.Small
 	HintLabel.TextXAlignment = Enum.TextXAlignment.Center
 	HintLabel.LayoutOrder = 2
-	HintLabel.ZIndex = Theme.ZIndex.Modal + 2
-	HintLabel.Parent = Dialog
 
-	local TextBoxContainer = Instance.new("Frame")
-	TextBoxContainer.Name = "TextBoxContainer"
-	TextBoxContainer.Size = UDim2.new(1, 0, 1, -100)
-	TextBoxContainer.BackgroundColor3 = Theme.Colors.BackgroundDark
-	TextBoxContainer.BorderSizePixel = 0
-	TextBoxContainer.LayoutOrder = 3
-	TextBoxContainer.ZIndex = Theme.ZIndex.Modal + 2
-	TextBoxContainer.Parent = Dialog
-
-	Theme.ApplyCorner(TextBoxContainer, Theme.Sizes.BorderRadiusSmall)
-
-	local TextBoxScroll = Instance.new("ScrollingFrame")
-	TextBoxScroll.Name = "Scroll"
-	TextBoxScroll.Size = UDim2.new(1, -8, 1, -8)
-	TextBoxScroll.Position = UDim2.fromOffset(4, 4)
-	TextBoxScroll.BackgroundTransparency = 1
-	TextBoxScroll.ScrollBarThickness = 6
-	TextBoxScroll.ScrollBarImageColor3 = Theme.Colors.BorderLight
-	TextBoxScroll.CanvasSize = UDim2.fromScale(0, 0)
+	local TextBoxScroll = UILibrary.DarkScrollContainer({
+		Name = "TextBoxScroll",
+		Size = UDim2.new(1, 0, 1, -120),
+		ZIndex = Theme.ZIndex.Modal + 2,
+		Parent = Dialog,
+	})
+	TextBoxScroll.LayoutOrder = 3
 	TextBoxScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-	TextBoxScroll.ZIndex = Theme.ZIndex.Modal + 2
-	TextBoxScroll.Parent = TextBoxContainer
 
 	local JsonTextBox = Instance.new("TextBox")
-	JsonTextBox.Name = "JsonTextBox"
-	JsonTextBox.Size = UDim2.fromScale(1, 0)
+	JsonTextBox.Name = "JsonContent"
+	JsonTextBox.Size = UDim2.new(1, -16, 0, 0)
+	JsonTextBox.Position = UDim2.fromOffset(8, 8)
 	JsonTextBox.AutomaticSize = Enum.AutomaticSize.Y
 	JsonTextBox.BackgroundTransparency = 1
 	JsonTextBox.Text = Config.JsonContent
 	JsonTextBox.TextColor3 = Theme.Colors.Text
-	JsonTextBox.FontFace = Font.new("rbxasset://fonts/families/RobotoMono.json")
-	JsonTextBox.TextSize = 12
+	JsonTextBox.FontFace = Theme.Fonts.Mono
+	JsonTextBox.TextSize = Theme.TextSizes.Small
 	JsonTextBox.TextXAlignment = Enum.TextXAlignment.Left
 	JsonTextBox.TextYAlignment = Enum.TextYAlignment.Top
 	JsonTextBox.TextWrapped = true

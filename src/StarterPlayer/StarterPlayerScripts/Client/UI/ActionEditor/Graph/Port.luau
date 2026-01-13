@@ -2,6 +2,7 @@
 
 local Theme = require(script.Parent.Parent.Theme)
 local Types = require(script.Parent.Parent.Types)
+local UILibrary = require(script.Parent.Parent.UILibrary)
 
 local Port = {}
 
@@ -10,7 +11,7 @@ export type PortConfig = {
 	Direction: Types.PortDirection,
 	PortType: Types.PortType,
 	NodeId: string,
-	Parent: GuiObject?,
+	Parent: Instance?,
 	OnConnectionStart: ((PortInstance: PortInstance) -> ())?,
 	OnConnectionEnd: ((PortInstance: PortInstance) -> ())?,
 	OnHover: ((Hovered: boolean) -> ())?,
@@ -29,6 +30,7 @@ export type PortInstance = {
 	Destroy: () -> (),
 }
 
+local INNER_CIRCLE_SCALE = 0.55
 local INNER_DARKEN_FACTOR = 0.85
 
 local function DarkenColor(Color: Color3, Factor: number): Color3
@@ -59,9 +61,7 @@ function Port.Create(Config: PortConfig): PortInstance
 	PortCircle.ZIndex = Theme.ZIndex.Port
 	PortCircle.Parent = Container
 
-	Theme.ApplyCorner(PortCircle, UDim.new(0.5, 0))
-
-	local INNER_CIRCLE_SCALE = 0.55
+	UILibrary.Corner(PortCircle, UDim.new(0.5, 0))
 
 	local PortInnerCircle = Instance.new("Frame")
 	PortInnerCircle.Name = "InnerCircle"
@@ -73,7 +73,7 @@ function Port.Create(Config: PortConfig): PortInstance
 	PortInnerCircle.ZIndex = Theme.ZIndex.Port + 2
 	PortInnerCircle.Parent = PortCircle
 
-	Theme.ApplyCorner(PortInnerCircle, UDim.new(0.5, 0))
+	UILibrary.Corner(PortInnerCircle, UDim.new(0.5, 0))
 
 	local PortLabel = Instance.new("TextLabel")
 	PortLabel.Name = "Label"
@@ -150,7 +150,7 @@ function Port.Create(Config: PortConfig): PortInstance
 		PortCircle.Size = UDim2.fromOffset(Theme.Sizes.NodePortRadius * 2, Theme.Sizes.NodePortRadius * 2)
 	end))
 
-	local Instance: PortInstance = {
+	local PortInstance: PortInstance = {
 		Frame = Container,
 		NodeId = Config.NodeId,
 		PortName = Config.Name,
@@ -158,13 +158,13 @@ function Port.Create(Config: PortConfig): PortInstance
 		PortType = Config.PortType,
 	} :: any
 
-	function Instance.GetWorldPosition(): Vector2
+	function PortInstance.GetWorldPosition(): Vector2
 		local CirclePosition = PortCircle.AbsolutePosition
 		local CircleSize = PortCircle.AbsoluteSize
 		return CirclePosition + (CircleSize / 2)
 	end
 
-	function Instance.SetHighlighted(Highlighted: boolean)
+	function PortInstance.SetHighlighted(Highlighted: boolean)
 		_IsHighlighted = Highlighted
 		if Highlighted then
 			PortCircle.BackgroundColor3 = Theme.Colors.BorderFocus
@@ -175,11 +175,11 @@ function Port.Create(Config: PortConfig): PortInstance
 		end
 	end
 
-	function Instance.SetConnected(Connected: boolean)
+	function PortInstance.SetConnected(Connected: boolean)
 		_IsConnected = Connected
 	end
 
-	function Instance.Destroy()
+	function PortInstance.Destroy()
 		for _, Connection in Connections do
 			Connection:Disconnect()
 		end
@@ -187,7 +187,7 @@ function Port.Create(Config: PortConfig): PortInstance
 		Container:Destroy()
 	end
 
-	return Instance
+	return PortInstance
 end
 
 return Port

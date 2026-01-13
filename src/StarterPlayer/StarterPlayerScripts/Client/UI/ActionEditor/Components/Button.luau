@@ -1,6 +1,7 @@
 --!strict
 
 local Theme = require(script.Parent.Parent.Theme)
+local UILibrary = require(script.Parent.Parent.UILibrary)
 
 local Button = {}
 
@@ -42,102 +43,84 @@ function Button.Create(Config: ButtonConfig): ButtonInstance
 
 	local OnClickCallback = Config.OnClick
 
-	local ButtonFrame = Instance.new("TextButton")
-	ButtonFrame.Name = Config.Name or "Button"
-	ButtonFrame.Size = Config.Size or UDim2.new(1, 0, 0, Theme.Sizes.ButtonHeight)
-	ButtonFrame.Position = Config.Position or UDim2.fromScale(0, 0)
-	ButtonFrame.AnchorPoint = Config.AnchorPoint or Vector2.zero
+	local ButtonFrame = UILibrary.SecondaryButton({
+		Name = Config.Name or "Button",
+		Text = Config.Text or "Button",
+		Size = Config.Size or UDim2.new(1, 0, 0, Theme.Sizes.ButtonHeight),
+		Position = Config.Position,
+		AnchorPoint = Config.AnchorPoint,
+		LayoutOrder = Config.LayoutOrder or 0,
+		ZIndex = BaseZIndex,
+		Parent = Config.Parent,
+	})
+
 	ButtonFrame.BackgroundColor3 = BackgroundColor
-	ButtonFrame.BorderSizePixel = 0
-	ButtonFrame.LayoutOrder = Config.LayoutOrder or 0
-	ButtonFrame.AutoButtonColor = false
-	ButtonFrame.ZIndex = BaseZIndex
-
-	ButtonFrame.Text = Config.Text or ""
 	ButtonFrame.TextColor3 = TextColor
-	ButtonFrame.FontFace = Config.Font or Theme.Fonts.Default
-	ButtonFrame.TextSize = Config.TextSize or Theme.TextSizes.Default
 
-	Theme.ApplyCorner(ButtonFrame, Config.CornerRadius)
-	Theme.ApplyStroke(ButtonFrame, Theme.Colors.Border)
+	if Config.Font then
+		ButtonFrame.FontFace = Config.Font
+	end
 
-	if Config.Parent then
-		ButtonFrame.Parent = Config.Parent
+	if Config.TextSize then
+		ButtonFrame.TextSize = Config.TextSize
 	end
 
 	local Connections: { RBXScriptConnection } = {}
 
-	local function UpdateVisual(Hovered: boolean, Pressed: boolean)
-		if not Enabled then
-			ButtonFrame.BackgroundColor3 = Theme.Colors.BackgroundDark
-			ButtonFrame.TextColor3 = Theme.Colors.TextDisabled
-			return
-		end
-
-		if Pressed then
-			ButtonFrame.BackgroundColor3 = ActiveColor
-		elseif Hovered then
-			ButtonFrame.BackgroundColor3 = HoverColor
-		else
-			ButtonFrame.BackgroundColor3 = BackgroundColor
-		end
-		ButtonFrame.TextColor3 = TextColor
-	end
-
-	local IsHovered = false
-	local IsPressed = false
-
 	table.insert(Connections, ButtonFrame.MouseEnter:Connect(function()
-		IsHovered = true
-		UpdateVisual(IsHovered, IsPressed)
+		if Enabled then
+			ButtonFrame.BackgroundColor3 = HoverColor
+		end
 	end))
 
 	table.insert(Connections, ButtonFrame.MouseLeave:Connect(function()
-		IsHovered = false
-		IsPressed = false
-		UpdateVisual(IsHovered, IsPressed)
+		if Enabled then
+			ButtonFrame.BackgroundColor3 = BackgroundColor
+		end
 	end))
 
 	table.insert(Connections, ButtonFrame.MouseButton1Down:Connect(function()
-		if not Enabled then
-			return
+		if Enabled then
+			ButtonFrame.BackgroundColor3 = ActiveColor
 		end
-		IsPressed = true
-		UpdateVisual(IsHovered, IsPressed)
 	end))
 
 	table.insert(Connections, ButtonFrame.MouseButton1Up:Connect(function()
-		IsPressed = false
-		UpdateVisual(IsHovered, IsPressed)
+		if Enabled then
+			ButtonFrame.BackgroundColor3 = HoverColor
+		end
 	end))
 
 	table.insert(Connections, ButtonFrame.MouseButton1Click:Connect(function()
-		if not Enabled then
-			return
-		end
-		if OnClickCallback then
+		if Enabled and OnClickCallback then
 			OnClickCallback()
 		end
 	end))
 
-	local Instance = {
+	local ButtonInstance: ButtonInstance = {
 		Frame = ButtonFrame,
-	}
+	} :: any
 
-	function Instance.SetText(Text: string)
+	function ButtonInstance.SetText(Text: string)
 		ButtonFrame.Text = Text
 	end
 
-	function Instance.SetEnabled(NewEnabled: boolean)
+	function ButtonInstance.SetEnabled(NewEnabled: boolean)
 		Enabled = NewEnabled
-		UpdateVisual(IsHovered, IsPressed)
+		if Enabled then
+			ButtonFrame.BackgroundColor3 = BackgroundColor
+			ButtonFrame.TextColor3 = TextColor
+		else
+			ButtonFrame.BackgroundColor3 = Theme.Colors.SurfaceActive
+			ButtonFrame.TextColor3 = Theme.Colors.TextMuted
+		end
 	end
 
-	function Instance.SetOnClick(Callback: () -> ())
+	function ButtonInstance.SetOnClick(Callback: () -> ())
 		OnClickCallback = Callback
 	end
 
-	function Instance.Destroy()
+	function ButtonInstance.Destroy()
 		for _, Connection in Connections do
 			Connection:Disconnect()
 		end
@@ -145,32 +128,7 @@ function Button.Create(Config: ButtonConfig): ButtonInstance
 		ButtonFrame:Destroy()
 	end
 
-	return Instance
-end
-
-export type IconButtonConfig = ButtonConfig & {
-	Icon: string?,
-	IconSize: UDim2?,
-}
-
-function Button.CreateIcon(Config: IconButtonConfig): ButtonInstance
-	local BaseButton = Button.Create(Config)
-	local BaseZIndex = Config.ZIndex or Theme.ZIndex.Panel
-
-	if Config.Icon then
-		local IconImage = Instance.new("ImageLabel")
-		IconImage.Name = "Icon"
-		IconImage.Size = Config.IconSize or UDim2.fromOffset(16, 16)
-		IconImage.Position = UDim2.fromScale(0.5, 0.5)
-		IconImage.AnchorPoint = Vector2.new(0.5, 0.5)
-		IconImage.BackgroundTransparency = 1
-		IconImage.Image = Config.Icon
-		IconImage.ImageColor3 = Config.TextColor or Theme.Colors.Text
-		IconImage.ZIndex = BaseZIndex + 1
-		IconImage.Parent = BaseButton.Frame
-	end
-
-	return BaseButton
+	return ButtonInstance
 end
 
 return Button

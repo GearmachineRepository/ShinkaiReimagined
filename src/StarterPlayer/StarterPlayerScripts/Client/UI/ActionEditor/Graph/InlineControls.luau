@@ -1,8 +1,11 @@
 --!strict
 
+local UserInputService = game:GetService("UserInputService")
+
 local DropdownState = require(script.Parent.Parent.State.DropdownState)
 local Theme = require(script.Parent.Parent.Theme)
 local Types = require(script.Parent.Parent.Types)
+local UILibrary = require(script.Parent.Parent.UILibrary)
 
 local InlineControls = {}
 
@@ -15,7 +18,7 @@ export type ControlConfig = {
 	PropertyDef: Types.PropertyDefinition,
 	Value: any,
 	OnChanged: (NewValue: any) -> (),
-	Parent: GuiObject,
+	Parent: Instance,
 	ZIndex: number?,
 	Disabled: boolean?,
 }
@@ -43,7 +46,7 @@ end
 
 function InlineControls.CreateNumber(Config: ControlConfig): ControlInstance
 	local CurrentValue = Config.Value or Config.PropertyDef.Default or 0
-	local _IsDisabled = Config.Disabled or false
+	local IsDisabled = Config.Disabled or false
 	local Connections: { RBXScriptConnection } = {}
 	local CurrentZIndex = Config.ZIndex or Theme.ZIndex.NodeContent
 
@@ -72,32 +75,93 @@ function InlineControls.CreateNumber(Config: ControlConfig): ControlInstance
 	ValueBackground.ZIndex = CurrentZIndex
 	ValueBackground.Parent = Container
 
-	Theme.ApplyCorner(ValueBackground, UDim.new(0, 3))
+	UILibrary.Corner(ValueBackground, UDim.new(0, 3))
 
 	local TextBox = Instance.new("TextBox")
 	TextBox.Name = "Input"
 	TextBox.Size = UDim2.new(1, -CONTROL_PADDING * 2, 1, 0)
 	TextBox.Position = UDim2.fromOffset(CONTROL_PADDING, 0)
 	TextBox.BackgroundTransparency = 1
-	TextBox.Text = tostring(CurrentValue)
 	TextBox.TextColor3 = Theme.Colors.Text
-	TextBox.PlaceholderText = "0"
 	TextBox.PlaceholderColor3 = Theme.Colors.TextMuted
-	TextBox.FontFace = Theme.Fonts.Default
+	TextBox.FontFace = Theme.Fonts.Mono
 	TextBox.TextSize = Theme.TextSizes.Small
-	TextBox.TextXAlignment = Enum.TextXAlignment.Left
+	TextBox.TextXAlignment = Enum.TextXAlignment.Center
 	TextBox.ClearTextOnFocus = false
 	TextBox.ZIndex = CurrentZIndex + 2
 	TextBox.Parent = ValueBackground
 
-	table.insert(Connections, TextBox.FocusLost:Connect(function()
-		local Parsed = tonumber(TextBox.Text)
-		if Parsed then
-			CurrentValue = Parsed
+	local function UpdateDisplay()
+		if math.floor(CurrentValue) == CurrentValue then
+			TextBox.Text = tostring(CurrentValue)
+		else
+			TextBox.Text = string.format("%.2f", CurrentValue)
+		end
+	end
+
+	local function ApplyValue(Text: string)
+		local Num = tonumber(Text)
+		if Num then
+			local Min = Config.PropertyDef.Min or -9999
+			local Max = Config.PropertyDef.Max or 9999
+			Num = math.clamp(Num, Min, Max)
+			CurrentValue = Num
+			UpdateDisplay()
 			Config.OnChanged(CurrentValue)
 		else
-			TextBox.Text = tostring(CurrentValue)
+			UpdateDisplay()
 		end
+	end
+
+	UpdateDisplay()
+
+	local DragConnection: RBXScriptConnection? = nil
+	local DragStartValue = 0
+	local DragStartX = 0
+	local IsDragging = false
+
+	table.insert(Connections, ValueBackground.InputBegan:Connect(function(Input: InputObject)
+		if IsDisabled then
+			return
+		end
+		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+			IsDragging = true
+			DragStartValue = CurrentValue
+			DragStartX = Input.Position.X
+
+			if DragConnection then
+				DragConnection:Disconnect()
+			end
+
+			DragConnection = UserInputService.InputChanged:Connect(function(MoveInput: InputObject)
+				if MoveInput.UserInputType == Enum.UserInputType.MouseMovement then
+					local Delta = MoveInput.Position.X - DragStartX
+					local Sensitivity = 0.1
+					local NewValue = DragStartValue + Delta * Sensitivity
+					local Min = Config.PropertyDef.Min or -9999
+					local Max = Config.PropertyDef.Max or 9999
+					CurrentValue = math.clamp(NewValue, Min, Max)
+					UpdateDisplay()
+				end
+			end)
+		end
+	end))
+
+	table.insert(Connections, ValueBackground.InputEnded:Connect(function(Input: InputObject)
+		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+			if DragConnection then
+				DragConnection:Disconnect()
+				DragConnection = nil
+			end
+			if IsDragging and CurrentValue ~= DragStartValue then
+				Config.OnChanged(CurrentValue)
+			end
+			IsDragging = false
+		end
+	end))
+
+	table.insert(Connections, TextBox.FocusLost:Connect(function()
+		ApplyValue(TextBox.Text)
 	end))
 
 	local ControlInstance: ControlInstance = {
@@ -110,11 +174,11 @@ function InlineControls.CreateNumber(Config: ControlConfig): ControlInstance
 
 	function ControlInstance.SetValue(Value: any)
 		CurrentValue = tonumber(Value) or 0
-		TextBox.Text = tostring(CurrentValue)
+		UpdateDisplay()
 	end
 
 	function ControlInstance.SetDisabled(Disabled: boolean)
-		_IsDisabled = Disabled
+		IsDisabled = Disabled
 		TextBox.TextEditable = not Disabled
 		ValueBackground.BackgroundTransparency = if Disabled then 0.5 else 0
 		TextBox.TextColor3 = if Disabled then Theme.Colors.TextMuted else Theme.Colors.Text
@@ -134,6 +198,9 @@ function InlineControls.CreateNumber(Config: ControlConfig): ControlInstance
 			Conn:Disconnect()
 		end
 		table.clear(Connections)
+		if DragConnection then
+			DragConnection:Disconnect()
+		end
 		Container:Destroy()
 	end
 
@@ -141,8 +208,11 @@ function InlineControls.CreateNumber(Config: ControlConfig): ControlInstance
 end
 
 function InlineControls.CreateBoolean(Config: ControlConfig): ControlInstance
-	local CurrentValue = Config.Value or Config.PropertyDef.Default or false
-	local _IsDisabled = Config.Disabled or false
+	local CurrentValue = Config.Value
+	if CurrentValue == nil then
+		CurrentValue = Config.PropertyDef.Default or false
+	end
+	local IsDisabled = Config.Disabled or false
 	local Connections: { RBXScriptConnection } = {}
 	local CurrentZIndex = Config.ZIndex or Theme.ZIndex.NodeContent
 
@@ -155,12 +225,11 @@ function InlineControls.CreateBoolean(Config: ControlConfig): ControlInstance
 	Checkbox.BackgroundColor3 = if CurrentValue then Theme.Colors.Primary else Theme.Colors.BackgroundDark
 	Checkbox.BorderSizePixel = 0
 	Checkbox.Text = ""
-	Checkbox.AutoButtonColor = true
 	Checkbox.ZIndex = CurrentZIndex + 1
 	Checkbox.Parent = Container
 
-	Theme.ApplyCorner(Checkbox, UDim.new(0, 3))
-	Theme.ApplyStroke(Checkbox, Theme.Colors.Border)
+	UILibrary.Corner(Checkbox, UDim.new(0, 3))
+	UILibrary.Stroke(Checkbox, Theme.Colors.Border, 1)
 
 	local Checkmark = Instance.new("TextLabel")
 	Checkmark.Name = "Checkmark"
@@ -176,8 +245,8 @@ function InlineControls.CreateBoolean(Config: ControlConfig): ControlInstance
 
 	local Label = Instance.new("TextLabel")
 	Label.Name = "Label"
-	Label.Size = UDim2.new(1, -(CHECKBOX_SIZE + 8), 1, 0)
-	Label.Position = UDim2.fromOffset(CHECKBOX_SIZE + 8, 0)
+	Label.Size = UDim2.new(1, -CHECKBOX_SIZE - 6, 1, 0)
+	Label.Position = UDim2.fromOffset(CHECKBOX_SIZE + 6, 0)
 	Label.BackgroundTransparency = 1
 	Label.Text = Config.PropertyDef.Label
 	Label.TextColor3 = Theme.Colors.Text
@@ -194,7 +263,7 @@ function InlineControls.CreateBoolean(Config: ControlConfig): ControlInstance
 	end
 
 	table.insert(Connections, Checkbox.MouseButton1Click:Connect(function()
-		if _IsDisabled then
+		if IsDisabled then
 			return
 		end
 		CurrentValue = not CurrentValue
@@ -216,7 +285,7 @@ function InlineControls.CreateBoolean(Config: ControlConfig): ControlInstance
 	end
 
 	function ControlInstance.SetDisabled(Disabled: boolean)
-		_IsDisabled = Disabled
+		IsDisabled = Disabled
 		Checkbox.AutoButtonColor = not Disabled
 		Checkbox.BackgroundTransparency = if Disabled then 0.5 else 0
 		Label.TextColor3 = if Disabled then Theme.Colors.TextMuted else Theme.Colors.Text
@@ -244,13 +313,13 @@ end
 function InlineControls.CreateDropdown(Config: ControlConfig): ControlInstance
 	local CurrentValue = Config.Value or Config.PropertyDef.Default or ""
 	local Options = Config.PropertyDef.Options or {}
-	local _IsDisabled = Config.Disabled or false
+	local IsDisabled = Config.Disabled or false
 	local IsOpen = false
-	local CurrentDropdownId: string? = nil
 	local Connections: { RBXScriptConnection } = {}
 	local CurrentZIndex = Config.ZIndex or Theme.ZIndex.NodeContent
 	local DropdownList: Frame? = nil
 	local Backdrop: TextButton? = nil
+	local DropdownId: string? = nil
 
 	local Container = CreateBaseContainer(Config)
 
@@ -277,11 +346,11 @@ function InlineControls.CreateDropdown(Config: ControlConfig): ControlInstance
 	ButtonBackground.ZIndex = CurrentZIndex
 	ButtonBackground.Parent = Container
 
-	Theme.ApplyCorner(ButtonBackground, UDim.new(0, 3))
+	UILibrary.Corner(ButtonBackground, UDim.new(0, 3))
 
 	local Button = Instance.new("TextButton")
-	Button.Name = "DropdownButton"
-	Button.Size = UDim2.new(1, -14, 1, 0)
+	Button.Name = "Button"
+	Button.Size = UDim2.new(1, -12, 1, 0)
 	Button.Position = UDim2.fromOffset(4, 0)
 	Button.BackgroundTransparency = 1
 	Button.Text = tostring(CurrentValue)
@@ -295,8 +364,8 @@ function InlineControls.CreateDropdown(Config: ControlConfig): ControlInstance
 
 	local Arrow = Instance.new("TextLabel")
 	Arrow.Name = "Arrow"
-	Arrow.Size = UDim2.fromOffset(12, CONTROL_HEIGHT)
-	Arrow.Position = UDim2.new(1, -12, 0, 0)
+	Arrow.Size = UDim2.fromOffset(10, CONTROL_HEIGHT)
+	Arrow.Position = UDim2.new(1, -10, 0, 0)
 	Arrow.BackgroundTransparency = 1
 	Arrow.Text = "▼"
 	Arrow.TextColor3 = Theme.Colors.TextMuted
@@ -306,46 +375,41 @@ function InlineControls.CreateDropdown(Config: ControlConfig): ControlInstance
 	Arrow.Parent = ButtonBackground
 
 	local function CloseDropdown()
-		if Backdrop then
-			Backdrop:Destroy()
-			Backdrop = nil
+		if not IsOpen then
+			return
 		end
+		IsOpen = false
+
+		if DropdownId then
+			DropdownState.Close(DropdownId)
+			DropdownId = nil
+		end
+
 		if DropdownList then
 			DropdownList:Destroy()
 			DropdownList = nil
 		end
-
-		if CurrentDropdownId then
-			DropdownState.Close(CurrentDropdownId)
-			CurrentDropdownId = nil
+		if Backdrop then
+			Backdrop:Destroy()
+			Backdrop = nil
 		end
-		IsOpen = false
-		Arrow.Text = "▼"
 	end
 
 	local function OpenDropdown()
 		if IsOpen then
-			CloseDropdown()
 			return
 		end
-
-		CurrentDropdownId = DropdownState.Open()
 		IsOpen = true
-		Arrow.Text = "▲"
+		DropdownId = DropdownState.Open()
 
-		local ButtonAbsPos = ButtonBackground.AbsolutePosition
-		local ButtonAbsSize = ButtonBackground.AbsoluteSize
-		local ScreenGui = ButtonBackground:FindFirstAncestorOfClass("ScreenGui")
-
+		local ScreenGui = Container:FindFirstAncestorOfClass("ScreenGui")
 		if not ScreenGui then
-			CloseDropdown()
 			return
 		end
 
 		local NewBackdrop = Instance.new("TextButton")
 		NewBackdrop.Name = "DropdownBackdrop"
 		NewBackdrop.Size = UDim2.fromScale(1, 1)
-		NewBackdrop.Position = UDim2.fromScale(0, 0)
 		NewBackdrop.BackgroundTransparency = 1
 		NewBackdrop.Text = ""
 		NewBackdrop.ZIndex = DROPDOWN_ZINDEX - 1
@@ -356,28 +420,29 @@ function InlineControls.CreateDropdown(Config: ControlConfig): ControlInstance
 			CloseDropdown()
 		end)
 
+		local ButtonPos = ButtonBackground.AbsolutePosition
+		local ButtonSize = ButtonBackground.AbsoluteSize
+		local ListHeight = math.min(#Options * CONTROL_HEIGHT, 150)
+
 		local NewDropdownList = Instance.new("Frame")
 		NewDropdownList.Name = "DropdownList"
-		NewDropdownList.Size = UDim2.fromOffset(ButtonAbsSize.X, #Options * (CONTROL_HEIGHT + 2) + 4)
-		NewDropdownList.Position = UDim2.fromOffset(ButtonAbsPos.X, ButtonAbsPos.Y + ButtonAbsSize.Y + 2)
+		NewDropdownList.Size = UDim2.fromOffset(ButtonSize.X, ListHeight)
+		NewDropdownList.Position = UDim2.fromOffset(ButtonPos.X, ButtonPos.Y + ButtonSize.Y + 2)
 		NewDropdownList.BackgroundColor3 = Theme.Colors.Surface
 		NewDropdownList.BorderSizePixel = 0
 		NewDropdownList.ZIndex = DROPDOWN_ZINDEX
+		NewDropdownList.ClipsDescendants = true
 		NewDropdownList.Parent = ScreenGui
 		DropdownList = NewDropdownList
 
-		Theme.ApplyCorner(NewDropdownList, UDim.new(0, 3))
-		Theme.ApplyStroke(NewDropdownList, Theme.Colors.Border, 1)
+		UILibrary.Corner(NewDropdownList, UDim.new(0, 3))
+		UILibrary.Stroke(NewDropdownList, Theme.Colors.Border)
 
-		local Padding = Instance.new("UIPadding")
-		Padding.PaddingTop = UDim.new(0, 2)
-		Padding.PaddingBottom = UDim.new(0, 2)
-		Padding.Parent = DropdownList
-
-		local Layout = Instance.new("UIListLayout")
-		Layout.FillDirection = Enum.FillDirection.Vertical
-		Layout.Padding = UDim.new(0, 2)
-		Layout.Parent = DropdownList
+		UILibrary.ListLayout({
+			Direction = Enum.FillDirection.Vertical,
+			Padding = UDim.new(0, 0),
+			Parent = NewDropdownList,
+		})
 
 		for Index, Option in pairs(Options) do
 			local OptionButton = Instance.new("TextButton")
@@ -391,7 +456,7 @@ function InlineControls.CreateDropdown(Config: ControlConfig): ControlInstance
 			OptionButton.TextSize = Theme.TextSizes.Small
 			OptionButton.AutoButtonColor = false
 			OptionButton.ZIndex = DROPDOWN_ZINDEX + 1
-			OptionButton.Parent = DropdownList
+			OptionButton.Parent = NewDropdownList
 
 			OptionButton.MouseEnter:Connect(function()
 				OptionButton.BackgroundTransparency = 0.5
@@ -411,7 +476,7 @@ function InlineControls.CreateDropdown(Config: ControlConfig): ControlInstance
 	end
 
 	table.insert(Connections, Button.MouseButton1Click:Connect(function()
-		if _IsDisabled then
+		if IsDisabled then
 			return
 		end
 		if IsOpen then
@@ -435,7 +500,7 @@ function InlineControls.CreateDropdown(Config: ControlConfig): ControlInstance
 	end
 
 	function ControlInstance.SetDisabled(Disabled: boolean)
-		_IsDisabled = Disabled
+		IsDisabled = Disabled
 		Button.AutoButtonColor = not Disabled
 		ButtonBackground.BackgroundTransparency = if Disabled then 0.5 else 0
 		Button.TextColor3 = if Disabled then Theme.Colors.TextMuted else Theme.Colors.Text
@@ -468,7 +533,7 @@ end
 
 function InlineControls.CreateString(Config: ControlConfig): ControlInstance
 	local CurrentValue = Config.Value or Config.PropertyDef.Default or ""
-	local _IsDisabled = Config.Disabled or false
+	local IsDisabled = Config.Disabled or false
 	local _IsFocused = false
 	local Connections: { RBXScriptConnection } = {}
 	local CurrentZIndex = Config.ZIndex or Theme.ZIndex.NodeContent
@@ -498,7 +563,7 @@ function InlineControls.CreateString(Config: ControlConfig): ControlInstance
 	ValueBackground.ZIndex = CurrentZIndex
 	ValueBackground.Parent = Container
 
-	Theme.ApplyCorner(ValueBackground, UDim.new(0, 3))
+	UILibrary.Corner(ValueBackground, UDim.new(0, 3))
 
 	local TextBox = Instance.new("TextBox")
 	TextBox.Name = "Input"
@@ -531,7 +596,7 @@ function InlineControls.CreateString(Config: ControlConfig): ControlInstance
 	end
 
 	table.insert(Connections, TextBox.Focused:Connect(function()
-		if not _IsDisabled then
+		if not IsDisabled then
 			SetFocusedLayout(true)
 		end
 	end))
@@ -556,7 +621,7 @@ function InlineControls.CreateString(Config: ControlConfig): ControlInstance
 	end
 
 	function ControlInstance.SetDisabled(Disabled: boolean)
-		_IsDisabled = Disabled
+		IsDisabled = Disabled
 		TextBox.TextEditable = not Disabled
 		ValueBackground.BackgroundTransparency = if Disabled then 0.5 else 0
 		TextBox.TextColor3 = if Disabled then Theme.Colors.TextMuted else Theme.Colors.Text

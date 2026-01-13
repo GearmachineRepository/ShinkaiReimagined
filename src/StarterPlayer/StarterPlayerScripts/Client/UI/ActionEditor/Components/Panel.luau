@@ -1,6 +1,7 @@
 --!strict
 
 local Theme = require(script.Parent.Parent.Theme)
+local UILibrary = require(script.Parent.Parent.UILibrary)
 
 local Panel = {}
 
@@ -15,32 +16,48 @@ export type PanelConfig = {
 	Padding: UDim?,
 	LayoutOrder: number?,
 	Visible: boolean?,
-	Parent: GuiObject?,
+	Parent: Instance?,
 }
 
 function Panel.Create(Config: PanelConfig): Frame
-	local PanelFrame = Instance.new("Frame")
-	PanelFrame.Name = Config.Name or "Panel"
-	PanelFrame.Size = Config.Size or UDim2.fromScale(1, 1)
-	PanelFrame.Position = Config.Position or UDim2.fromScale(0, 0)
-	PanelFrame.AnchorPoint = Config.AnchorPoint or Vector2.zero
+	local PanelFrame = UILibrary.SurfaceContainer({
+		Name = Config.Name or "Panel",
+		Size = Config.Size or UDim2.fromScale(1, 1),
+		Position = Config.Position,
+		LayoutOrder = Config.LayoutOrder or 0,
+		ZIndex = Theme.ZIndex.Panel,
+		Parent = Config.Parent,
+	})
+
 	PanelFrame.BackgroundColor3 = Config.BackgroundColor or Theme.Colors.Surface
-	PanelFrame.BorderSizePixel = 0
-	PanelFrame.LayoutOrder = Config.LayoutOrder or 0
-	PanelFrame.Visible = if Config.Visible ~= nil then Config.Visible else true
 
-	Theme.ApplyCorner(PanelFrame, Config.CornerRadius)
+	if Config.AnchorPoint then
+		PanelFrame.AnchorPoint = Config.AnchorPoint
+	end
 
-	if Config.BorderColor then
-		Theme.ApplyStroke(PanelFrame, Config.BorderColor)
+	if Config.Visible ~= nil then
+		PanelFrame.Visible = Config.Visible
+	end
+
+	local Corner = PanelFrame:FindFirstChildOfClass("UICorner")
+	if Corner and Config.CornerRadius then
+		Corner.CornerRadius = Config.CornerRadius
+	end
+
+	local Stroke = PanelFrame:FindFirstChildOfClass("UIStroke")
+	if Stroke then
+		if Config.BorderColor then
+			Stroke.Color = Config.BorderColor
+		else
+			Stroke:Destroy()
+		end
 	end
 
 	if Config.Padding then
-		Theme.ApplyPadding(PanelFrame, Config.Padding)
-	end
-
-	if Config.Parent then
-		PanelFrame.Parent = Config.Parent
+		UILibrary.Padding({
+			All = Config.Padding,
+			Parent = PanelFrame,
+		})
 	end
 
 	return PanelFrame
@@ -63,6 +80,7 @@ function Panel.CreateScrollable(Config: ScrollPanelConfig): ScrollingFrame
 	ScrollFrame.BorderSizePixel = 0
 	ScrollFrame.LayoutOrder = Config.LayoutOrder or 0
 	ScrollFrame.Visible = if Config.Visible ~= nil then Config.Visible else true
+	ScrollFrame.ZIndex = Theme.ZIndex.Panel
 
 	ScrollFrame.ScrollingDirection = Config.ScrollDirection or Enum.ScrollingDirection.Y
 	ScrollFrame.ScrollBarThickness = Config.ScrollBarThickness or 6
@@ -70,14 +88,19 @@ function Panel.CreateScrollable(Config: ScrollPanelConfig): ScrollingFrame
 	ScrollFrame.CanvasSize = Config.CanvasSize or UDim2.fromScale(0, 0)
 	ScrollFrame.AutomaticCanvasSize = Config.AutomaticCanvasSize or Enum.AutomaticSize.Y
 
-	Theme.ApplyCorner(ScrollFrame, Config.CornerRadius)
+	if Config.CornerRadius then
+		UILibrary.Corner(ScrollFrame, Config.CornerRadius)
+	end
 
 	if Config.BorderColor then
-		Theme.ApplyStroke(ScrollFrame, Config.BorderColor)
+		UILibrary.Stroke(ScrollFrame, Config.BorderColor)
 	end
 
 	if Config.Padding then
-		Theme.ApplyPadding(ScrollFrame, Config.Padding)
+		UILibrary.Padding({
+			All = Config.Padding,
+			Parent = ScrollFrame,
+		})
 	end
 
 	if Config.Parent then
